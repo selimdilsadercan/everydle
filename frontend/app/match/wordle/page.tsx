@@ -855,19 +855,47 @@ const MatchWordle = () => {
       {roundWinnerName && match.lastRoundResults && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-lg animate-in fade-in duration-300 overflow-y-auto py-8">
           <div className="w-full max-w-md px-6 text-center">
-            <div className="w-20 h-20 mx-auto mb-4 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-bounce">
-              <Trophy className="w-10 h-10 text-white" />
-            </div>
+            {roundWinnerName === "Beraberlik!" ? (
+              <div className="w-20 h-20 mx-auto mb-4 bg-slate-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(100,116,139,0.4)]">
+                <Clock className="w-10 h-10 text-white" />
+              </div>
+            ) : match.lastRoundResults.winnerId === odaId ? (
+              <div className="w-20 h-20 mx-auto mb-4 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-bounce">
+                <Trophy className="w-10 h-10 text-white" />
+              </div>
+            ) : (
+              <div className="w-20 h-20 mx-auto mb-4 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)]">
+                <XCircle className="w-10 h-10 text-white" />
+              </div>
+            )}
             
             <h2 className="text-3xl font-black text-white mb-1 uppercase tracking-tighter">
-                {roundWinnerName === "Beraberlik!" ? roundWinnerName : "ROUND KAZANILDI"}
+                {roundWinnerName === "Beraberlik!" 
+                  ? "BERABERLİK!" 
+                  : match.lastRoundResults.winnerId === odaId 
+                    ? "ROUND KAZANILDI" 
+                    : "ROUND KAYBEDİLDİ"}
             </h2>
-            <p className="text-slate-500 text-[10px] uppercase font-black tracking-[0.2em] mb-3">
+            <p className="text-slate-500 text-[10px] uppercase font-black tracking-[0.2em] mb-1">
               ROUND {(match.score1 || 0) + (match.score2 || 0)} TAMAMLANDI
             </p>
+
+            {/* Skor Göstergesi */}
+            {match.bestOf && match.bestOf > 1 && (
+              <div className="flex items-center justify-center gap-3 mb-4 scale-75 origin-center">
+                <div className={`text-4xl font-black ${(match.score1 || 0) > (match.score2 || 0) ? 'text-emerald-400' : 'text-white'}`}>
+                  {match.score1 || 0}
+                </div>
+                <div className="text-2xl font-black text-slate-700">-</div>
+                <div className={`text-4xl font-black ${(match.score2 || 0) > (match.score1 || 0) ? 'text-emerald-400' : 'text-white'}`}>
+                  {match.score2 || 0}
+                </div>
+              </div>
+            )}
+
             {roundWinnerName !== "Beraberlik!" && (
-                <p className="text-emerald-400 text-lg font-bold mb-4 flex items-center justify-center gap-2">
-                  <Zap className="w-5 h-5" /> {roundWinnerName}
+                <p className={`${match.lastRoundResults.winnerId === odaId ? 'text-emerald-400' : 'text-red-400'} text-lg font-bold mb-4 flex items-center justify-center gap-2`}>
+                  <Zap className="w-5 h-5" /> {roundWinnerName || 'Rakip'}
                 </p>
             )}
 

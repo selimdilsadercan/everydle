@@ -95,6 +95,7 @@ export const startDirectBotMatch = mutation({
       bestOf: args.playerTrophies >= 600 ? 3 : 1,
       score1: 0,
       score2: 0,
+      round: 1,
     });
 
     // Her iki oyuncu için state oluştur
@@ -262,6 +263,7 @@ export const createBotMatch = internalMutation({
       bestOf: trophies >= 600 ? 3 : 1,
       score1: 0,
       score2: 0,
+      round: 1,
     });
 
     // Oyuncu state'i oluştur
@@ -506,7 +508,7 @@ export const botMakeMove = internalMutation({
           }
         }
       } else {
-        // Bir sonraki round'a geç
+        // Bir sonraki round' hazırlıkları - 10 saniye sonra resetlenecek
         const nextTargetWord = WORDLE_WORDS[Math.floor(Math.random() * WORDLE_WORDS.length)];
         
         // Oyuncu state'ini al
@@ -516,10 +518,10 @@ export const botMakeMove = internalMutation({
           .filter((q) => q.neq(q.field("odaId"), args.botOdaId))
           .first();
 
+        // Maç skorlarını ve son sonuçları kaydet (Kelime henüz değişmiyor)
         await ctx.db.patch(args.matchId, {
           score1: newScore1,
           score2: newScore2,
-          targetWord: nextTargetWord,
           lastRoundResults: {
             winnerId: args.botOdaId,
             word: args.targetWord,
@@ -528,28 +530,31 @@ export const botMakeMove = internalMutation({
           }
         });
 
-        // Her iki oyuncunun state'ini sıfırla
-        const allStates = await ctx.db
-          .query("playerStates")
-          .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
-          .collect();
+        // Her iki oyuncunun state'ini "kazandı/kaybetti" olarak güncelle (ama silme)
+        if (playerStateRound) {
+            await ctx.db.patch(playerStateRound._id, {
+                gameState: "lost", // Bot kazandığı için oyuncu kaybetti
+                finishedAt: Date.now(),
+            });
+        }
         
-        for (const ps of allStates) {
-          await ctx.db.patch(ps._id, {
-            guesses: [],
-            currentGuess: "",
-            gameState: "playing",
-            finishedAt: undefined,
-          });
+        // Botun kendi state'ini de güncelle
+        const botState = await ctx.db
+            .query("playerStates")
+            .withIndex("by_matchId_odaId", (q) => q.eq("matchId", args.matchId).eq("odaId", args.botOdaId))
+            .first();
+        if (botState) {
+            await ctx.db.patch(botState._id, {
+                guesses: newGuesses,
+                gameState: "won",
+                finishedAt: Date.now(),
+            });
         }
 
-        // Bot'un bir sonraki round'daki ilk hamlesini planla
-        const roundDelay = 10000 + Math.random() * 2000; // 10 saniye bekle
-        await ctx.scheduler.runAfter(roundDelay, internal.bot.botMakeMove, {
-          matchId: args.matchId,
-          botOdaId: args.botOdaId,
-          targetWord: nextTargetWord,
-          difficulty: args.difficulty,
+        // 10 saniye sonra yeni round'u başlat
+        await ctx.scheduler.runAfter(10000, internal.game.startNextRound, {
+            matchId: args.matchId,
+            nextWord: nextTargetWord,
         });
       }
 

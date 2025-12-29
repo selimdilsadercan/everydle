@@ -50,6 +50,7 @@ export const joinQueue = mutation({
         bestOf,
         score1: 0,
         score2: 0,
+        round: 1,
       });
       
       // Her iki oyuncu için state oluştur

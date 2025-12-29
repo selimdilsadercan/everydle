@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { getRandomWord } from "./wordleWords";
@@ -224,54 +224,47 @@ export const submitGuess = mutation({
             }
           }
         } else {
-          // Bir sonraki round'a geç - wordleState'leri sıfırla
+          // Bir sonraki round' hazırlıkları - 10 saniye sonra resetlenecek
           const nextWord = getRandomWord();
           
-          // Son round sonuçlarını kaydet
+          // Mevcut durumları al
           const player1State = args.odaId === match.odaId1 ? playerState : opponentState;
           const player2State = args.odaId === match.odaId1 ? opponentState : playerState;
 
+          // Maç skorlarını ve son sonuçları kaydet (Kelimeyi henüz değiştirmiyoruz)
           await ctx.db.patch(args.matchId, {
             score1: newScore1,
             score2: newScore2,
-            targetWord: nextWord,
             lastRoundResults: {
               winnerId: roundWinner ?? undefined,
               word: targetWord,
-              guesses1: player1State?.guesses || [],
-              guesses2: player2State?.guesses || [],
+              guesses1: match.odaId1 === args.odaId ? newGuesses : (opponentState?.guesses || []),
+              guesses2: match.odaId2 === args.odaId ? newGuesses : (opponentState?.guesses || []),
             }
           });
 
-          // Oyuncuların state'lerini sıfırla
+          // Oyuncuların state'lerini "kazandı/kaybetti" olarak güncelle (ama silme)
+          // Bu, 10 saniye boyunca gridlerin renkli kalmasını sağlar
           if (player1State) {
+            const isP1RoundWinner = roundWinner === match.odaId1;
             await ctx.db.patch(player1State._id, {
-              guesses: [],
-              currentGuess: "",
-              gameState: "playing",
-              finishedAt: undefined,
+              gameState: isP1RoundWinner ? "won" : (roundWinner ? "lost" : "playing"), // draw ise playing kalsın ama 10s bekleme
+              finishedAt: Date.now(),
             });
           }
           if (player2State) {
+            const isP2RoundWinner = roundWinner === match.odaId2;
             await ctx.db.patch(player2State._id, {
-              guesses: [],
-              currentGuess: "",
-              gameState: "playing",
-              finishedAt: undefined,
+              gameState: isP2RoundWinner ? "won" : (roundWinner ? "lost" : "playing"),
+              finishedAt: Date.now(),
             });
           }
 
-          // Bot maçı ise botu yeni round için tetikle
-          if (match.isBotMatch && match.botDifficulty) {
-            const botOdaId = match.odaId1 === args.odaId ? match.odaId2 : match.odaId1;
-            const roundDelay = 10000 + Math.random() * 2000; // 10 saniye bekle (transition ekranı için)
-            await ctx.scheduler.runAfter(roundDelay, internal.bot.botMakeMove, {
-              matchId: args.matchId,
-              botOdaId,
-              targetWord: nextWord,
-              difficulty: match.botDifficulty as "easy" | "medium" | "hard",
-            });
-          }
+          // 10 saniye sonra yeni round'u başlatacak olan mutation'ı planla
+          await ctx.scheduler.runAfter(10000, internal.game.startNextRound, {
+            matchId: args.matchId,
+            nextWord: nextWord,
+          });
         }
       }
     }
@@ -444,6 +437,50 @@ export const clearShake = mutation({
     if (playerState) {
       await ctx.db.patch(playerState._id, {
         receivedShakeAt: undefined,
+      });
+    }
+  },
+});
+
+// Yeni round başlat - 10 saniye beklemeden sonra çağrılır
+export const startNextRound = internalMutation({
+  args: { 
+    matchId: v.id("matches"),
+    nextWord: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const match = await ctx.db.get(args.matchId);
+    if (!match || match.status !== "playing") return;
+
+    // Maç bilgisini güncelle
+    await ctx.db.patch(args.matchId, {
+      targetWord: args.nextWord,
+      round: (match.round || 1) + 1,
+    });
+
+    // Her iki oyuncunun state'ini sıfırla
+    const playerStates = await ctx.db
+      .query("playerStates")
+      .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
+      .collect();
+
+    for (const ps of playerStates) {
+      await ctx.db.patch(ps._id, {
+        guesses: [],
+        currentGuess: "",
+        gameState: "playing",
+        finishedAt: undefined,
+      });
+    }
+
+    // Bot maçı ise botu tetikle
+    if (match.isBotMatch && match.botDifficulty) {
+      const botOdaId = match.odaId2; // odaId2 her zaman bot
+      await ctx.scheduler.runAfter(2000 + Math.random() * 2000, internal.bot.botMakeMove, {
+        matchId: args.matchId,
+        botOdaId,
+        targetWord: args.nextWord,
+        difficulty: match.botDifficulty as "easy" | "medium" | "hard",
       });
     }
   },
