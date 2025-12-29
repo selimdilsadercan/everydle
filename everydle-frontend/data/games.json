@@ -1,0 +1,109 @@
+{
+  "games": {
+    "wordle": {
+      "id": "wordle",
+      "name": "Five Letters",
+      "description": "Günün kelimesini bul",
+      "icon": "🔤",
+      "color": "from-emerald-500 to-emerald-600",
+      "borderColor": "border-emerald-400",
+      "shadowColor": "shadow-emerald-500/30",
+      "difficulty": "Kolay",
+      "players": "10K+",
+      "isNew": false,
+      "isPopular": true
+    },
+    "contexto": {
+      "id": "contexto",
+      "name": "Word Proximity",
+      "description": "Anlam benzerliğinden bul",
+      "icon": "💭",
+      "color": "from-pink-500 to-pink-600",
+      "borderColor": "border-pink-400",
+      "shadowColor": "shadow-pink-500/30",
+      "difficulty": "Zor",
+      "players": "2K+",
+      "isNew": true,
+      "isPopular": false
+    },
+    "moviedle": {
+      "id": "moviedle",
+      "name": "CineGuess",
+      "description": "Günün filmini bul",
+      "icon": "🎬",
+      "color": "from-red-500 to-red-600",
+      "borderColor": "border-red-400",
+      "shadowColor": "shadow-red-500/30",
+      "difficulty": "Orta",
+      "players": "6K+",
+      "isNew": false,
+      "isPopular": true
+    },
+    "redactle": {
+      "id": "redactle",
+      "name": "Hidden Article",
+      "description": "Makaleyi ortaya çıkar",
+      "icon": "📄",
+      "color": "from-slate-500 to-slate-600",
+      "borderColor": "border-slate-400",
+      "shadowColor": "shadow-slate-500/30",
+      "difficulty": "Zor",
+      "players": "1K+",
+      "isNew": false,
+      "isPopular": false
+    },
+    "quordle": {
+      "id": "quordle",
+      "name": "QuadGrid",
+      "description": "4 kelimeyi aynı anda bul",
+      "icon": "4️⃣",
+      "color": "from-blue-500 to-blue-600",
+      "borderColor": "border-blue-400",
+      "shadowColor": "shadow-blue-500/30",
+      "difficulty": "Orta",
+      "players": "5K+",
+      "isNew": false,
+      "isPopular": true
+    },
+    "octordle": {
+      "id": "octordle",
+      "name": "OctaGrid",
+      "description": "8 kelimeyi aynı anda bul",
+      "icon": "8️⃣",
+      "color": "from-purple-500 to-purple-600",
+      "borderColor": "border-purple-400",
+      "shadowColor": "shadow-purple-500/30",
+      "difficulty": "Zor",
+      "players": "3K+",
+      "isNew": false,
+      "isPopular": false
+    },
+    "nerdle": {
+      "id": "nerdle",
+      "name": "Equation",
+      "description": "Denklemi bul",
+      "icon": "🔢",
+      "color": "from-orange-500 to-orange-600",
+      "borderColor": "border-orange-400",
+      "shadowColor": "shadow-orange-500/30",
+      "difficulty": "Orta",
+      "players": "4K+",
+      "isNew": false,
+      "isPopular": false
+    },
+
+    "pokerdle": {
+      "id": "pokerdle",
+      "name": "Poker Puzzle",
+      "description": "Poker elini bul",
+      "icon": "🃏",
+      "color": "from-yellow-500 to-yellow-600",
+      "borderColor": "border-yellow-400",
+      "shadowColor": "shadow-yellow-500/30",
+      "difficulty": "Orta",
+      "players": "1K+",
+      "isNew": true,
+      "isPopular": false
+    }
+  }
+}

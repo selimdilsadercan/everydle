@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "697982187928",
+    "project_id": "everydle-f6242",
+    "storage_bucket": "everydle-f6242.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:697982187928:android:2b1c31535df982c00dd3ed",
+        "android_client_info": {
+          "package_name": "com.everydle.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "697982187928-dp1anm49jaj8cdic0rk6metj9g77vnfe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIkiwRGOUzfS3w6tMMa0DTLivDdYBblJk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "697982187928-dp1anm49jaj8cdic0rk6metj9g77vnfe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
