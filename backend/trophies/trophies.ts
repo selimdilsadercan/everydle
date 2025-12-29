@@ -28,6 +28,7 @@ export interface LeaderboardEntry {
     losses: number
     rank: number
     player_type: 'user' | 'bot'
+    difficulty?: string | null
 }
 
 // =====================================================

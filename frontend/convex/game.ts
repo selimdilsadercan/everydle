@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { getRandomWord } from "./wordleWords";
 
 // Maç bilgisini getir
 export const getMatch = query({
@@ -131,58 +132,146 @@ export const submitGuess = mutation({
       finishedAt: isWon || isLost ? Date.now() : undefined,
     });
     
-    // Oyuncu kazandıysa maçı bitir
-    if (isWon) {
-      await ctx.db.patch(args.matchId, {
-        status: "finished",
-        winnerId: args.odaId,
-        finishedAt: Date.now(),
-      });
+    // Oyuncuyu kazandıysa set sonucunu değerlendir
+    if (isWon || isLost) {
+      // Rakip durumunu al
+      const opponentOdaId = match.odaId1 === args.odaId ? match.odaId2 : match.odaId1;
+      const opponentState = await ctx.db
+        .query("playerStates")
+        .withIndex("by_matchId_odaId", (q) => 
+          q.eq("matchId", args.matchId).eq("odaId", opponentOdaId)
+        )
+        .first();
 
-      // Bot maçı ise Encore'a sonucu logla ve kupaları güncelle (action ile)
-      if (match.isBotMatch) {
-        // Rakip (bot) state'ini al
-        const botState = await ctx.db
-          .query("playerStates")
-          .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
-          .filter((q) => q.neq(q.field("odaId"), args.odaId))
-          .first();
+      const bestOf = match.bestOf ?? 1;
+      const winThreshold = Math.ceil(bestOf / 2);
 
-        // Maç sonucunu Encore'a logla (action)
-        await ctx.scheduler.runAfter(0, internal.encoreApi.logMatchResult, {
-          matchId: args.matchId,
-          player1Id: match.player1EncoreId || args.odaId,
-          player1Type: "user",
-          player1Name: match.username1,
-          player2Id: match.botId || match.odaId2,
-          player2Type: "bot",
-          player2Name: match.username2,
-          winnerId: match.player1EncoreId || args.odaId,
-          winnerType: "user",
-          player1Attempts: newGuesses.length,
-          player2Attempts: botState?.guesses.length || 0,
-          player1TrophyChange: 30,
-          player2TrophyChange: -15,
-          word: targetWord,
-          gameType: "wordle",
-        });
+      let roundWinner: string | null = null;
+      let roundDraw = false;
 
-        // Oyuncu kupasını güncelle (+30)
-        if (match.player1EncoreId) {
-          await ctx.scheduler.runAfter(0, internal.encoreApi.applyUserMatchResult, {
-            userId: match.player1EncoreId,
-            result: "win",
-            trophyChange: 30,
+      if (isWon) {
+        roundWinner = args.odaId;
+      } else if (isLost && opponentState?.gameState === "lost") {
+        // İki oyuncu da bilemedi, round'u berabere sayıp yeniden başlat
+        roundDraw = true;
+      } else if (isLost && opponentState?.gameState === "won") {
+          // Rakip zaten kazanmış (nadir durum, senkronizasyon için)
+          roundWinner = opponentOdaId;
+      }
+
+      if (roundWinner || roundDraw) {
+        // Skorları güncelle
+        const currentScore1 = match.score1 ?? 0;
+        const currentScore2 = match.score2 ?? 0;
+        const isPlayer1 = args.odaId === match.odaId1;
+        
+        let newScore1 = currentScore1;
+        let newScore2 = currentScore2;
+
+        if (roundWinner === match.odaId1) newScore1++;
+        if (roundWinner === match.odaId2) newScore2++;
+
+        // Maç bitti mi?
+        const matchWinnerId = newScore1 >= winThreshold ? match.odaId1 : (newScore2 >= winThreshold ? match.odaId2 : null);
+
+        if (matchWinnerId) {
+          // Maçı tamamen bitir
+          await ctx.db.patch(args.matchId, {
+            status: "finished",
+            winnerId: matchWinnerId,
+            score1: newScore1,
+            score2: newScore2,
+            finishedAt: Date.now(),
           });
-        }
 
-        // Bot kupasını güncelle (-15) - botId varsa
-        if (match.botId) {
-          await ctx.scheduler.runAfter(0, internal.encoreApi.applyBotMatchResult, {
-            botId: match.botId,
-            result: "lose",
-            trophyChange: -15,
+          // Bot maçı ise Encore'a sonucu logla
+          if (match.isBotMatch) {
+            const isUserWinner = matchWinnerId === (match.odaId1 === args.odaId ? args.odaId : match.odaId1);
+            
+            await ctx.scheduler.runAfter(0, internal.encoreApi.logMatchResult, {
+              matchId: args.matchId,
+              player1Id: match.player1EncoreId || (isPlayer1 ? args.odaId : opponentOdaId),
+              player1Type: "user",
+              player1Name: match.username1,
+              player2Id: match.botId || (isPlayer1 ? opponentOdaId : args.odaId),
+              player2Type: "bot",
+              player2Name: match.username2,
+              winnerId: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? (match.player1EncoreId || (isPlayer1 ? args.odaId : opponentOdaId)) : (match.botId || (isPlayer1 ? opponentOdaId : args.odaId)),
+              winnerType: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? "user" : "bot",
+              player1Attempts: isPlayer1 ? newGuesses.length : (opponentState?.guesses.length || 0),
+              player2Attempts: isPlayer1 ? (opponentState?.guesses.length || 0) : newGuesses.length,
+              player1TrophyChange: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? 30 : -15,
+              player2TrophyChange: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? -15 : 30,
+              word: targetWord,
+              gameType: "wordle",
+            });
+
+            // Kupaları güncelle
+            if (match.player1EncoreId) {
+              await ctx.scheduler.runAfter(0, internal.encoreApi.applyUserMatchResult, {
+                userId: match.player1EncoreId,
+                result: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? "win" : "lose",
+                trophyChange: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? 30 : -15,
+              });
+            }
+
+            if (match.botId) {
+              await ctx.scheduler.runAfter(0, internal.encoreApi.applyBotMatchResult, {
+                botId: match.botId,
+                result: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? "lose" : "win",
+                trophyChange: matchWinnerId === (isPlayer1 ? args.odaId : opponentOdaId) ? -15 : 30,
+              });
+            }
+          }
+        } else {
+          // Bir sonraki round'a geç - wordleState'leri sıfırla
+          const nextWord = getRandomWord();
+          
+          // Son round sonuçlarını kaydet
+          const player1State = args.odaId === match.odaId1 ? playerState : opponentState;
+          const player2State = args.odaId === match.odaId1 ? opponentState : playerState;
+
+          await ctx.db.patch(args.matchId, {
+            score1: newScore1,
+            score2: newScore2,
+            targetWord: nextWord,
+            lastRoundResults: {
+              winnerId: roundWinner ?? undefined,
+              word: targetWord,
+              guesses1: player1State?.guesses || [],
+              guesses2: player2State?.guesses || [],
+            }
           });
+
+          // Oyuncuların state'lerini sıfırla
+          if (player1State) {
+            await ctx.db.patch(player1State._id, {
+              guesses: [],
+              currentGuess: "",
+              gameState: "playing",
+              finishedAt: undefined,
+            });
+          }
+          if (player2State) {
+            await ctx.db.patch(player2State._id, {
+              guesses: [],
+              currentGuess: "",
+              gameState: "playing",
+              finishedAt: undefined,
+            });
+          }
+
+          // Bot maçı ise botu yeni round için tetikle
+          if (match.isBotMatch && match.botDifficulty) {
+            const botOdaId = match.odaId1 === args.odaId ? match.odaId2 : match.odaId1;
+            const roundDelay = 10000 + Math.random() * 2000; // 10 saniye bekle (transition ekranı için)
+            await ctx.scheduler.runAfter(roundDelay, internal.bot.botMakeMove, {
+              matchId: args.matchId,
+              botOdaId,
+              targetWord: nextWord,
+              difficulty: match.botDifficulty as "easy" | "medium" | "hard",
+            });
+          }
         }
       }
     }

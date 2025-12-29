@@ -16,6 +16,7 @@ export const joinQueue = mutation({
   args: { 
     username: v.string(),
     encoreUserId: v.optional(v.string()), // Encore backend user ID
+    trophies: v.optional(v.number()), // Oyuncunun güncel kupa sayısı
   },
   handler: async (ctx, args) => {
     const odaId = generateOdaId();
@@ -33,6 +34,10 @@ export const joinQueue = mutation({
       // Rastgele kelime seç - words_wordle_5letters_filtered.txt'den
       const targetWord = getRandomWord();
       
+      // Kupa sayısına göre Best of N belirle (Altın Arena ve üzeri: 3 maç)
+      const maxTrophies = Math.max(waitingPlayer.trophies || 0, args.trophies || 0);
+      const bestOf = maxTrophies >= 600 ? 3 : 1;
+
       // Maç oluştur
       const matchId = await ctx.db.insert("matches", {
         odaId1: waitingPlayer.odaId,
@@ -42,6 +47,9 @@ export const joinQueue = mutation({
         targetWord,
         status: "playing",
         startedAt: Date.now(),
+        bestOf,
+        score1: 0,
+        score2: 0,
       });
       
       // Her iki oyuncu için state oluştur
@@ -73,6 +81,7 @@ export const joinQueue = mutation({
       const queueEntryId = await ctx.db.insert("matchQueue", {
         odaId,
         username: args.username,
+        trophies: args.trophies,
         status: "waiting",
         createdAt: Date.now(),
       });
@@ -83,6 +92,7 @@ export const joinQueue = mutation({
         playerOdaId: odaId,
         playerUsername: args.username,
         playerEncoreId: args.encoreUserId, // Encore user ID'yi geç
+        playerTrophies: args.trophies || 0, // Kupa bilgisini bot eşleştirmesine aktar
       });
       
       return { status: "waiting", odaId, myUsername: args.username };

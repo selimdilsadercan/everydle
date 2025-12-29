@@ -22,11 +22,15 @@ CREATE INDEX IF NOT EXISTS idx_bot_profiles_difficulty ON bot_profiles(difficult
 -- =====================================================
 
 INSERT INTO bot_profiles (bot_name, difficulty, trophies) VALUES
+    ('👶 AcemiBot', 'easy', 150),
+    ('🌱 YeniBot', 'easy', 200),
+    ('🍵 ÇaylakBot', 'easy', 250),
     ('🤖 WordleBot', 'medium', 500),
-    ('🎮 AkıllıBot', 'medium', 500),
-    ('🧠 ZekiBot', 'hard', 700),
-    ('⚡ HızlıBot', 'hard', 600),
-    ('🎯 UstaBot', 'medium', 550)
+    ('🎮 AkıllıBot', 'medium', 450),
+    ('🎯 UstaBot', 'medium', 550),
+    ('🧠 ZekiBot', 'hard', 850),
+    ('⚡ HızlıBot', 'hard', 900),
+    ('🏆 ŞampiyonBot', 'hard', 1000)
 ON CONFLICT (bot_name) DO NOTHING;
 
 -- Trigger to auto-update updated_at

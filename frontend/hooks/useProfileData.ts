@@ -1,5 +1,5 @@
 import React from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { 
   getUserByFirebaseId, 
   getUserStars, 
@@ -180,14 +180,20 @@ export function useUserMutations(userId: string | undefined) {
   };
 }
 
-// 6. Leaderboard Hook
+// 6. Leaderboard Hook with Pagination
 export function useLeaderboard(limit: number = 10) {
-  return useQuery({
-    queryKey: QUERY_KEYS.leaderboard(limit),
-    queryFn: () => getLeaderboard(limit),
+  return useInfiniteQuery({
+    queryKey: ["leaderboard", limit],
+    queryFn: ({ pageParam = 0 }) => getLeaderboard(limit, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const currentCount = allPages.length * limit;
+      // Eğer son sayfada limit kadar veri geldiyse, muhtemelen daha fazlası vardır
+      return lastPage.data?.leaderboard?.length === limit ? currentCount : undefined;
+    },
     // Leaderboard'u her dakika güncelle
     staleTime: 60 * 1000,
-    select: (data) => data.data?.leaderboard || [],
+    select: (data) => data.pages.flatMap((page) => page.data?.leaderboard || []),
   });
 }
 

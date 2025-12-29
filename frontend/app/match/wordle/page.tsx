@@ -18,6 +18,25 @@ interface Letter {
   state: LetterState;
 }
 
+// Global color helpers
+const getGridCellColor = (state: LetterState) => {
+  switch (state) {
+    case "correct": return "bg-emerald-600";
+    case "present": return "bg-yellow-500";
+    case "absent": return "bg-slate-600";
+    default: return "bg-slate-700";
+  }
+};
+
+const getMiniGridColor = (state: LetterState) => {
+  switch (state) {
+    case "correct": return "bg-emerald-500";
+    case "present": return "bg-yellow-500";
+    case "absent": return "bg-slate-500";
+    default: return "bg-slate-700";
+  }
+};
+
 const MatchWordle = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -42,6 +61,10 @@ const MatchWordle = () => {
   const [shakeCooldown, setShakeCooldown] = useState(0);
   const [showShakeToast, setShowShakeToast] = useState(false);
   
+  // Round transition states
+  const [roundWinnerName, setRoundWinnerName] = useState<string | null>(null);
+  const [roundTransitionCountdown, setRoundTransitionCountdown] = useState<number | null>(null);
+
   // Trophy state - maç başına bir kez uygula
   const [trophyApplied, setTrophyApplied] = useState(false);
   
@@ -67,6 +90,53 @@ const MatchWordle = () => {
   const updateCurrentGuess = useMutation(api.game.updateCurrentGuess);
   const sendShake = useMutation(api.game.sendShake);
   const clearShake = useMutation(api.game.clearShake);
+  
+  // Round detection - input sıfırlama ve duyuru
+  const prevRoundWord = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!match || !match.lastRoundResults) return;
+
+    // Yeni bir round sonucu geldiğinde (backend set ettiğinde)
+    if (match.lastRoundResults.word !== prevRoundWord.current) {
+        console.log("Round end detected:", match.lastRoundResults.word);
+        setCurrentGuess("");
+        
+        // Kim kazandı bul
+        if (match.lastRoundResults.winnerId === match.odaId1) {
+            setRoundWinnerName(match.username1);
+        } else if (match.lastRoundResults.winnerId === match.odaId2) {
+            setRoundWinnerName(match.username2);
+        } else {
+            setRoundWinnerName("Beraberlik!");
+        }
+
+        // 10 saniye geri sayım başlat
+        setRoundTransitionCountdown(10);
+        const timer = setInterval(() => {
+            setRoundTransitionCountdown(prev => {
+                if (prev === null || prev <= 1) {
+                    clearInterval(timer);
+                    return null;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        
+        // 10 saniye sonra overlay'i kapat
+        const transitionTimeout = setTimeout(() => {
+            setRoundWinnerName(null);
+            setRoundTransitionCountdown(null);
+        }, 10000);
+
+        prevRoundWord.current = match.lastRoundResults.word;
+
+        return () => {
+            clearInterval(timer);
+            clearTimeout(transitionTimeout);
+        };
+    }
+  }, [match?.lastRoundResults?.word]);
   
   // Handle leaving the match (tab close, back button, navigation)
   useEffect(() => {
@@ -356,8 +426,8 @@ const MatchWordle = () => {
     );
   }
   
-  // Game finished state
-  if (match.status === "finished" || match.status === "abandoned" || playerState.gameState !== "playing") {
+  // Game finished state - Sadece maç tamamen bittiyse sonuç ekranını göster
+  if (match.status === "finished" || match.status === "abandoned") {
     const isWinner = match.winnerId === odaId;
     const isLoser = match.winnerId && match.winnerId !== odaId;
     const opponentAbandoned = match.status === "abandoned" && match.abandonedBy !== odaId;
@@ -367,16 +437,6 @@ const MatchWordle = () => {
     const opponentGuesses = opponentState?.guesses as Letter[][] | undefined;
     const myUsername = match.odaId1 === odaId ? match.username1 : match.username2;
     const opponentUsername = match.odaId1 === odaId ? match.username2 : match.username1;
-    
-    // Mini grid için renk fonksiyonu
-    const getGridCellColor = (state: LetterState) => {
-      switch (state) {
-        case "correct": return "bg-emerald-600";
-        case "present": return "bg-yellow-500";
-        case "absent": return "bg-slate-600";
-        default: return "bg-slate-700";
-      }
-    };
     
     return (
       <main className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center p-4 overflow-auto">
@@ -425,10 +485,20 @@ const MatchWordle = () => {
               </>
             )}
             
-            {/* Kelime */}
-            <div className="mt-4 py-3 px-6 bg-slate-800/70 rounded-xl inline-block">
-              <p className="text-xs text-slate-400 mb-1">Kelime</p>
-              <p className="text-xl font-bold text-white tracking-[0.3em]">{match.targetWord}</p>
+            {/* Sonuç ve Skor */}
+            <div className="mt-4 flex flex-col items-center">
+              <div className="py-3 px-6 bg-slate-800/70 rounded-xl inline-block mb-3">
+                <p className="text-xs text-slate-400 mb-1">Kelime</p>
+                <p className="text-xl font-bold text-white tracking-[0.3em]">{match.targetWord}</p>
+              </div>
+              
+              {match.bestOf && match.bestOf > 1 && (
+                <div className="flex items-center gap-4 text-2xl font-black text-white bg-black/20 px-6 py-2 rounded-2xl border border-white/10">
+                  <span className={match.winnerId === match.odaId1 ? "text-emerald-400" : ""}>{match.score1 || 0}</span>
+                  <span className="text-slate-500">-</span>
+                  <span className={match.winnerId === match.odaId2 ? "text-emerald-400" : ""}>{match.score2 || 0}</span>
+                </div>
+              )}
             </div>
           </div>
           
@@ -523,22 +593,12 @@ const MatchWordle = () => {
 
   const guesses = playerState.guesses as Letter[][];
 
-  // Helper to get mini grid color
-  const getMiniGridColor = (state: LetterState) => {
-    switch (state) {
-      case "correct": return "bg-emerald-500";
-      case "present": return "bg-yellow-500";
-      case "absent": return "bg-slate-500";
-      default: return "bg-slate-700";
-    }
-  };
-
   return (
     <main className={`min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center py-4 px-4 pb-20 ${opponentShake ? 'animate-shake' : ''} ${receivedShake ? 'animate-shake-strong' : ''}`}>
       <div className="w-full max-w-md">
         {/* Header */}
         <header className="mb-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <button
               onClick={handleLeaveGame}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
@@ -546,7 +606,20 @@ const MatchWordle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-xl font-bold">Online Wordle</h1>
+            {/* Scoreboard Bar */}
+            {match.bestOf && match.bestOf > 1 ? (
+              <div className="flex items-center bg-slate-800/80 backdrop-blur rounded-2xl border border-white/5 py-1 px-4 shadow-xl">
+                <div className={`text-xl font-black ${match.odaId1 === odaId ? 'text-emerald-400' : 'text-slate-100'}`}>
+                  {match.odaId1 === odaId ? (match.score1 || 0) : (match.score2 || 0)}
+                </div>
+                <div className="mx-3 text-slate-500 font-bold">-</div>
+                <div className={`text-xl font-black ${match.odaId1 !== odaId ? 'text-emerald-400' : 'text-slate-100'}`}>
+                  {match.odaId1 !== odaId ? (match.score1 || 0) : (match.score2 || 0)}
+                </div>
+              </div>
+            ) : (
+              <h1 className="text-xl font-bold">Online Wordle</h1>
+            )}
 
             {/* Timer */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 rounded-lg">
@@ -558,8 +631,20 @@ const MatchWordle = () => {
           {/* Players Status with Mini Grids */}
           <div className="grid grid-cols-2 gap-3">
             {/* My Mini Grid */}
-            <div className="p-2 bg-emerald-900/30 rounded-lg border border-emerald-600/30">
-              <p className="text-xs text-emerald-400 text-center mb-1.5">Sen ({guesses.length}/6)</p>
+            <div className={`p-2 bg-emerald-900/30 rounded-lg border border-emerald-600/30 transition-all ${roundWinnerName ? 'opacity-20 scale-95' : ''}`}>
+              <div className="flex flex-col items-center mb-1.5">
+                <p className="text-[10px] uppercase font-bold text-emerald-400/80">Sen ({guesses.length}/6)</p>
+                {match.bestOf && match.bestOf > 1 && (
+                  <div className="flex gap-1.5 mt-1">
+                    {[...Array(Math.ceil(match.bestOf / 2))].map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`w-2.5 h-2.5 rounded-full border border-black/20 transition-all duration-300 ${i < (match.odaId1 === odaId ? (match.score1 ?? 0) : (match.score2 ?? 0)) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-slate-800/50'}`} 
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="space-y-0.5">
                 {[...Array(6)].map((_, row) => (
                   <div key={row} className="flex gap-0.5 justify-center">
@@ -579,10 +664,22 @@ const MatchWordle = () => {
             </div>
             
             {/* Opponent Mini Grid */}
-            <div className={`p-2 bg-red-900/30 rounded-lg border border-red-600/30 transition-all ${opponentShake ? 'ring-2 ring-red-500' : ''}`}>
-              <p className="text-xs text-red-400 text-center mb-1.5 truncate">
-                {(match?.odaId1 === odaId ? match?.username2 : match?.username1) || 'Rakip'} ({opponentState?.guessCount ?? 0}/6)
-              </p>
+            <div className={`p-2 bg-red-900/30 rounded-lg border border-red-600/30 transition-all ${opponentShake ? 'ring-2 ring-red-500' : ''} ${roundWinnerName ? 'opacity-20 scale-95' : ''}`}>
+              <div className="flex flex-col items-center mb-1.5">
+                <p className="text-[10px] uppercase font-bold text-red-400/80 truncate max-w-full">
+                  {(match?.odaId1 === odaId ? match?.username2 : match?.username1) || 'Rakip'} ({opponentState?.guessCount ?? 0}/6)
+                </p>
+                {match.bestOf && match.bestOf > 1 && (
+                  <div className="flex gap-1.5 mt-1">
+                    {[...Array(Math.ceil(match.bestOf / 2))].map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`w-2.5 h-2.5 rounded-full border border-black/20 transition-all duration-300 ${i < (match.odaId1 === odaId ? (match.score2 ?? 0) : (match.score1 ?? 0)) ? 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]' : 'bg-slate-800/50'}`} 
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="space-y-0.5">
                 {[...Array(6)].map((_, row) => {
                   const isCurrentRow = row === (opponentState?.guessCount ?? 0);
@@ -753,6 +850,114 @@ const MatchWordle = () => {
           <div className="fixed inset-0 bg-red-500/20 pointer-events-none z-40 animate-pulse" />
         )}
       </div>
+
+      {/* Round Transition Overlay */}
+      {roundWinnerName && match.lastRoundResults && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-lg animate-in fade-in duration-300 overflow-y-auto py-8">
+          <div className="w-full max-w-md px-6 text-center">
+            <div className="w-20 h-20 mx-auto mb-4 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-bounce">
+              <Trophy className="w-10 h-10 text-white" />
+            </div>
+            
+            <h2 className="text-3xl font-black text-white mb-1 uppercase tracking-tighter">
+                {roundWinnerName === "Beraberlik!" ? roundWinnerName : "ROUND KAZANILDI"}
+            </h2>
+            <p className="text-slate-500 text-[10px] uppercase font-black tracking-[0.2em] mb-3">
+              ROUND {(match.score1 || 0) + (match.score2 || 0)} TAMAMLANDI
+            </p>
+            {roundWinnerName !== "Beraberlik!" && (
+                <p className="text-emerald-400 text-lg font-bold mb-4 flex items-center justify-center gap-2">
+                  <Zap className="w-5 h-5" /> {roundWinnerName}
+                </p>
+            )}
+
+            {/* Bulunan Kelime */}
+            <div className="mb-6 py-2 px-6 bg-white/5 rounded-2xl border border-white/10 inline-block">
+              <p className="text-[10px] text-slate-500 uppercase font-black mb-1">Bulunacak Kelime</p>
+              <p className="text-2xl font-black text-white tracking-[0.4em]">{match.lastRoundResults.word}</p>
+            </div>
+
+            {/* Girdi Gridi - İki tarafın tahminleri */}
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              {/* Oyuncu 1 */}
+              <div className="space-y-4">
+                <p className={`text-xs font-bold truncate ${match.lastRoundResults.winnerId === match.odaId1 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {match.lastRoundResults.winnerId === match.odaId1 && "🏆 "}{match.username1}
+                </p>
+                <div className="space-y-1">
+                  {[...Array(6)].map((_, rowIdx) => (
+                    <div key={rowIdx} className="flex gap-1 justify-center">
+                      {[...Array(5)].map((_, colIdx) => {
+                        const cell = (match.lastRoundResults?.guesses1 as any[])?.[rowIdx]?.[colIdx];
+                        return (
+                          <div
+                            key={colIdx}
+                            className={`w-6 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold text-white shadow-inner ${
+                              cell ? getGridCellColor(cell.state) : 'bg-slate-800'
+                            }`}
+                          >
+                            {cell?.letter || ''}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500">{(match.lastRoundResults.guesses1 as any[]).length}/6 tahmin</p>
+              </div>
+
+              {/* Oyuncu 2 */}
+              <div className="space-y-4">
+                <p className={`text-xs font-bold truncate ${match.lastRoundResults.winnerId === match.odaId2 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                   {match.lastRoundResults.winnerId === match.odaId2 && "🏆 "}{match.username2}
+                </p>
+                <div className="space-y-1">
+                  {[...Array(6)].map((_, rowIdx) => (
+                    <div key={rowIdx} className="flex gap-1 justify-center">
+                      {[...Array(5)].map((_, colIdx) => {
+                        const cell = (match.lastRoundResults?.guesses2 as any[])?.[rowIdx]?.[colIdx];
+                        return (
+                          <div
+                            key={colIdx}
+                            className={`w-6 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold text-white shadow-inner ${
+                              cell ? getGridCellColor(cell.state) : 'bg-slate-800'
+                            }`}
+                          >
+                            {cell?.letter || ''}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500">{(match.lastRoundResults.guesses2 as any[]).length}/6 tahmin</p>
+              </div>
+            </div>
+            
+            {/* Geri Sayım */}
+            <div className="flex flex-col items-center border-t border-white/5 pt-6">
+              <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-2">Yeni Round Başlıyor</p>
+              <div className="relative w-16 h-16 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90">
+                  <circle
+                    cx="32" cy="32" r="28"
+                    stroke="currentColor" strokeWidth="4" fill="transparent"
+                    className="text-white/10"
+                  />
+                  <circle
+                    cx="32" cy="32" r="28"
+                    stroke="currentColor" strokeWidth="4" fill="transparent"
+                    strokeDasharray={176}
+                    strokeDashoffset={176 - (176 * (roundTransitionCountdown || 0)) / 10}
+                    className="text-emerald-500 transition-all duration-1000 ease-linear"
+                  />
+                </svg>
+                <span className="absolute text-2xl font-black text-white">{roundTransitionCountdown}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

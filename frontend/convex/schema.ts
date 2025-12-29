@@ -17,6 +17,7 @@ export default defineSchema({
   matchQueue: defineTable({
     odaId: v.string(), // Rastgele oda kimliği
     username: v.string(), // Oyuncunun kullanıcı adı
+    trophies: v.optional(v.number()), // Oyuncunun kupa sayısı
     status: v.union(v.literal("waiting"), v.literal("matched"), v.literal("cancelled")),
     createdAt: v.number(),
   }).index("by_status", ["status"]),
@@ -39,6 +40,16 @@ export default defineSchema({
     isBotMatch: v.optional(v.boolean()), // Bot maçı mı?
     botId: v.optional(v.string()), // Encore bot ID (bot maçı ise)
     botDifficulty: v.optional(v.string()), // Bot zorluk seviyesi
+    // Best of N desteği
+    score1: v.optional(v.number()), // Birinci oyuncunun aldığı set sayısı
+    score2: v.optional(v.number()), // İkinci oyuncunun aldığı set sayısı
+    bestOf: v.optional(v.number()), // Maçın kaç set üzerinden olduğu (örn: 3)
+    lastRoundResults: v.optional(v.object({
+      winnerId: v.optional(v.string()),
+      word: v.string(),
+      guesses1: v.array(v.any()), // [{letter, state}][]
+      guesses2: v.array(v.any()),
+    })),
   })
     .index("by_odaId1", ["odaId1"])
     .index("by_odaId2", ["odaId2"])

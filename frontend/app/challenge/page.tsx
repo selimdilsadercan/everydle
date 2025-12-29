@@ -59,6 +59,8 @@ export default function ChallengePage() {
   
   // Match history modal state
   const [showMatchHistoryModal, setShowMatchHistoryModal] = useState(false);
+  const [selectedBot, setSelectedBot] = useState<any>(null);
+  const [isStartingBotMatch, setIsStartingBotMatch] = useState(false);
   
   const { user, loading: authLoading } = useAuth();
   
@@ -71,7 +73,13 @@ export default function ChallengePage() {
   const { trophies, isLoading: isStatsLoading } = useUserStats(backendUserId);
 
   // 3. Leaderboard
-  const { data: leaderboard = [], isLoading: isLeaderboardLoading } = useLeaderboard();
+  const { 
+    data: leaderboard = [], 
+    isLoading: isLeaderboardLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useLeaderboard(10);
 
   // 4. Match History (cached)
   const { data: matchHistory = [], isLoading: isLoadingHistory, refetch: refetchMatchHistory } = useMatchHistory(backendUserId);
@@ -87,6 +95,7 @@ export default function ChallengePage() {
   const queryClient = useQueryClient();
 
   // Mutations
+  const startDirectBotMatch = useMutation(api.bot.startDirectBotMatch);
   const joinQueue = useMutation(api.matchmaking.joinQueue);
   const leaveQueue = useMutation(api.matchmaking.leaveQueue);
   const registerUser = useMutation(api.users.registerUser);
@@ -212,12 +221,16 @@ export default function ChallengePage() {
 
   // Match status check - VS ekranı göster
   useEffect(() => {
-    if (matchStatus?.status === "matched" && matchStatus.matchId && !showVsScreen) {
+    if (matchStatus?.status === "matched" && matchStatus.matchId) {
+      // İsimleri her zaman güncelle (özellikle bot isimleri sonradan değişebiliyor)
       setMyUsername(matchStatus.myUsername || "");
       setOpponentUsername(matchStatus.opponentUsername || "");
-      setPendingMatchId(matchStatus.matchId);
-      setShowVsScreen(true);
-      setIsSearching(false);
+      
+      if (!showVsScreen) {
+        setPendingMatchId(matchStatus.matchId);
+        setShowVsScreen(true);
+        setIsSearching(false);
+      }
     }
   }, [matchStatus, showVsScreen]);
 
@@ -260,12 +273,62 @@ export default function ChallengePage() {
     startSearchWithUsername(existingUser.username);
   };
   
+  const handleBotClick = (bot: any) => {
+    if (bot.player_type !== 'bot') return;
+    setSelectedBot(bot);
+  };
+
+  const handleStartBotMatch = async (watchMode: boolean = false) => {
+    if (!selectedBot || !deviceId) return;
+    
+    // Kullanıcı adı kontrolü
+    let username = "";
+    if (backendUser && (backendUser.username || backendUser.name)) {
+      username = backendUser.username || backendUser.name || "";
+    } else if (existingUser && existingUser.username) {
+      username = existingUser.username;
+    } else {
+      setShowUsernameModal(true);
+      setSelectedBot(null);
+      return;
+    }
+
+    setIsStartingBotMatch(true);
+    try {
+      const result = await startDirectBotMatch({
+        playerUsername: username,
+        playerEncoreId: backendUserId,
+        playerTrophies: trophies,
+        botId: selectedBot.user_id,
+        botName: selectedBot.username || selectedBot.name || "Bot",
+        botDifficulty: (selectedBot.difficulty as "easy" | "medium" | "hard") || "medium",
+      });
+
+      if (result.success) {
+        // Eğer watchMode aktifse botun oda ID'sini, değilse oyuncunun oda ID'sini kullan
+        const targetOdaId = watchMode && result.botOdaId ? result.botOdaId : result.odaId;
+        
+        setOdaId(targetOdaId);
+        setMyUsername(watchMode ? (selectedBot.username || selectedBot.name || "Bot") : username);
+        setOpponentUsername(watchMode ? username : (result.opponentUsername || "Bot"));
+        setPendingMatchId(result.matchId);
+        setShowVsScreen(true);
+        setSelectedBot(null);
+      }
+    } catch (error) {
+      console.error("Bot maçı başlatılamadı:", error);
+    } finally {
+      setIsStartingBotMatch(false);
+    }
+  };
+
   const startSearchWithUsername = async (username: string) => {
     setIsSearching(true);
     try {
       const result = await joinQueue({ 
         username,
         encoreUserId: backendUserId, // Encore user ID'yi geç
+        trophies, // Kupa bilgisine göre bot zorluğu belirlensin
       });
       setOdaId(result.odaId);
       setMyUsername(result.myUsername || username);
@@ -657,13 +720,16 @@ export default function ChallengePage() {
                   return (
                     <div 
                       key={entry.user_id} 
-                      className={`flex items-center gap-3 p-3 ${isCurrentUser ? "ring-2 ring-inset ring-emerald-500/50" : ""}`}
+                      onClick={() => entry.player_type === 'bot' && handleBotClick(entry)}
+                      className={`flex items-center gap-3 p-3 transition-colors ${
+                        entry.player_type === 'bot' ? "cursor-pointer hover:bg-slate-700/50" : ""
+                      } ${isCurrentUser ? "ring-2 ring-inset ring-emerald-500/50" : ""}`}
                     >
                       {/* Rank */}
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                         isTop3 ? rankColors[index] + " bg-slate-700" : "text-slate-400 bg-slate-800"
                       }`}>
-                        {isTop3 ? rankIcons[index] : entry.rank}
+                        {isTop3 ? rankIcons[index] : index + 1}
                       </div>
                       
                       {/* Avatar */}
@@ -696,6 +762,27 @@ export default function ChallengePage() {
                     </div>
                   );
                 })}
+
+                {/* Show More Button */}
+                {hasNextPage && (
+                  <button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="w-full py-4 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Yükleniyor...
+                      </>
+                    ) : (
+                      <>
+                        Daha Fazla Göster
+                        <ChevronUp className="w-4 h-4 rotate-180" />
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -818,7 +905,7 @@ export default function ChallengePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {matchHistory.map((match, index) => {
+                  {matchHistory.map((match: any, index: number) => {
                     const isPlayer1 = match.player1_id === backendUserId;
                     const isWinner = match.winner_id === backendUserId;
                     const opponentName = isPlayer1 ? match.player2_name : match.player1_name;
@@ -876,6 +963,76 @@ export default function ChallengePage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bot Challenge Modal */}
+      {selectedBot && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-999 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-slate-800 rounded-3xl border border-slate-700 shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            {/* Modal Header Decor */}
+            <div className={`h-2 bg-gradient-to-r ${
+              selectedBot.difficulty === 'hard' ? 'from-red-500 to-orange-500' :
+              selectedBot.difficulty === 'medium' ? 'from-blue-500 to-cyan-500' :
+              'from-emerald-500 to-teal-500'
+            }`} />
+            
+            <div className="p-6">
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-20 h-20 rounded-2xl bg-slate-700 flex items-center justify-center text-4xl mb-4 shadow-inner">
+                  🤖
+                </div>
+                <h3 className="text-2xl font-black text-white mb-1">{selectedBot.username || selectedBot.name}</h3>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    selectedBot.difficulty === 'hard' ? 'bg-red-500/20 text-red-400' :
+                    selectedBot.difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-emerald-500/20 text-emerald-400'
+                  }`}>
+                    {selectedBot.difficulty === 'hard' ? 'ZOR' : 
+                     selectedBot.difficulty === 'medium' ? 'ORTA' : 'KOLAY'}
+                  </span>
+                  <div className="flex items-center gap-1 text-yellow-400 font-bold">
+                    <Trophy className="w-4 h-4" />
+                    {selectedBot.trophies}
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-slate-400 text-center mb-8 px-4">
+                Bu botla özel bir düelloya girmek istiyor musun?
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => handleStartBotMatch(false)}
+                  disabled={isStartingBotMatch}
+                  className="w-full py-4 rounded-2xl font-black text-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg hover:shadow-green-500/20 transform hover:-translate-y-0.5 transition-all disabled:opacity-50"
+                >
+                  {isStartingBotMatch ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : "MEYDAN OKU!"}
+                </button>
+
+                {/* Local Develpoment Debug Button */}
+                {process.env.NODE_ENV === 'development' && (
+                  <button
+                    onClick={() => handleStartBotMatch(true)}
+                    disabled={isStartingBotMatch}
+                    className="w-full py-3 rounded-2xl font-bold bg-slate-700 text-white flex items-center justify-center gap-2 hover:bg-slate-600 transition-colors border border-slate-600"
+                  >
+                    🔍 Bot Gözünden İzle (Test)
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setSelectedBot(null)}
+                  disabled={isStartingBotMatch}
+                  className="w-full py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-700/50 transition-colors"
+                >
+                  Belki Sonra
+                </button>
+              </div>
             </div>
           </div>
         </div>

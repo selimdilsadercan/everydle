@@ -16,7 +16,8 @@ RETURNS TABLE (
     wins INTEGER,
     losses INTEGER,
     rank BIGINT,
-    player_type TEXT
+    player_type TEXT,
+    difficulty TEXT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -33,7 +34,8 @@ BEGIN
             t.trophies as player_trophies,
             t.wins as player_wins,
             t.losses as player_losses,
-            'user'::TEXT as type
+            'user'::TEXT as type,
+            NULL::TEXT as difficulty
         FROM user_trophies t
         JOIN users u ON t.user_id = u.id
         WHERE u.username IS NOT NULL AND u.username != ''
@@ -49,7 +51,8 @@ BEGIN
             b.trophies as player_trophies,
             b.wins as player_wins,
             b.losses as player_losses,
-            'bot'::TEXT as type
+            'bot'::TEXT as type,
+            b.difficulty as difficulty
         FROM bot_profiles b
     )
     SELECT 
@@ -61,7 +64,8 @@ BEGIN
         cl.player_wins as wins,
         cl.player_losses as losses,
         ROW_NUMBER() OVER(ORDER BY cl.player_trophies DESC, cl.player_wins DESC) as rank,
-        cl.type as player_type
+        cl.type as player_type,
+        cl.difficulty
     FROM combined_leaderboard cl
     ORDER BY cl.player_trophies DESC, cl.player_wins DESC
     LIMIT p_limit
