@@ -235,9 +235,9 @@ export const createBotMatch = internalMutation({
     const trophies = args.playerTrophies || 0;
     let difficulty: "easy" | "medium" | "hard" = "medium";
     
-    if (trophies < 400) {
+    if (trophies < 600) {
       difficulty = "easy";
-    } else if (trophies < 800) {
+    } else if (trophies < 2100) {
       difficulty = "medium";
     } else {
       difficulty = "hard";
