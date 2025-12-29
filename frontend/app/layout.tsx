@@ -17,9 +17,66 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteConfig = {
+  name: "Everydle",
+  description: "Türkiye'nin en popüler günlük kelime ve bulmaca oyunları koleksiyonu. Wordle, Contexto, Redactle ve daha fazlasını ücretsiz oyna.",
+  url: "https://playeverydle.com",
+  ogImage: "https://playeverydle.com/og-image.png",
+  keywords: [
+    "Wordle Türkçe", 
+    "Contexto Türkçe", 
+    "Redactle Türkçe", 
+    "Nerdle", 
+    "Bulmaca oyunları", 
+    "Günlük oyunlar", 
+    "Kelime oyunu", 
+    "Zeka oyunları",
+    "Everydle"
+  ],
+};
+
 export const metadata: Metadata = {
-  title: "Everydle | Puzzle Games Collection",
-  description: "Play Wordle, Contexto, Redactle, Nerdle, Pokerdle, Quordle, Octordle and Moviedle - a collection of fun puzzle games",
+  title: {
+    default: "Everydle | Günlük Kelime Oyunları Koleksiyonu",
+    template: "%s | Everydle"
+  },
+  description: siteConfig.description,
+  keywords: siteConfig.keywords,
+  authors: [{ name: "Everydle Team" }],
+  creator: "Everydle",
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    url: siteConfig.url,
+    title: "Everydle | Günlük Kelime Oyunları Koleksiyonu",
+    description: siteConfig.description,
+    siteName: siteConfig.name,
+    images: [
+      {
+        url: siteConfig.ogImage,
+        width: 1200,
+        height: 630,
+        alt: "Everydle Game Collection",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Everydle | Günlük Kelime Oyunları Koleksiyonu",
+    description: siteConfig.description,
+    images: [siteConfig.ogImage],
+    creator: "@everydle",
+  },
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
+  manifest: "/site.webmanifest",
+  metadataBase: new URL(siteConfig.url),
+  alternates: {
+    canonical: "/",
+  },
 };
 
 export default function RootLayout({
@@ -38,6 +95,30 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "Everydle",
+              "operatingSystem": "Web",
+              "applicationCategory": "GameApplication",
+              "description": siteConfig.description,
+              "url": siteConfig.url,
+              "genre": "Puzzle",
+              "author": {
+                "@type": "Organization",
+                "name": "Everydle"
+              },
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              }
+            })
+          }}
+        />
         <ConvexClientProvider>
           <QueryProvider>
             <AuthProvider>

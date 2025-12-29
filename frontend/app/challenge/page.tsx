@@ -569,6 +569,7 @@ export default function ChallengePage() {
 
       {/* Arena Display - Center */}
       <div className="relative px-4 py-8 pb-100">
+        <h1 className="sr-only">Everydle Kelime Düellosu - 1v1 Wordle Savaşı</h1>
         <div className="max-w-lg mx-auto">
           
           {/* Arena Visual Card */}

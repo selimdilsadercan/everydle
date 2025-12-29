@@ -365,6 +365,7 @@ function GamesContent() {
 
       {/* Games Grid */}
       <main className="max-w-lg mx-auto px-4 py-4">
+        <h1 className="sr-only">Everydle Günlük Kelime ve Bulmaca Oyunları</h1>
 
         {/* Weekly Day Selector */}
         <div className="mb-4">
