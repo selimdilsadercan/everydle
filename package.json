@@ -1,0 +1,22 @@
+{
+  "name": "everydle-monorepo",
+  "private": true,
+  "packageManager": "bun@1.2.3",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "generate": "turbo run generate",
+    "mobile": "turbo run mobile --filter=@everydle/frontend",
+    "store": "turbo run store --filter=@everydle/frontend",
+    "ios": "turbo run ios --filter=@everydle/frontend",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4"
+  }
+}

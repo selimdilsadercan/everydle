@@ -1,0 +1,47 @@
+{
+  "name": "@everydle/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next startd",
+    "lint": "eslint",
+    "generate": "encore gen client everydle-qnxi -e staging --output=./lib/client.ts",
+    "ios": "next build --turbopack && npx cap sync && npx cap open ios",
+    "mobile": "next build --turbopack && npx cap sync && npm run apk && npm run open-apk",
+    "store": "next build --turbopack && npx cap sync && npm run apk && npm run open-aab",
+    "apk": "cd android && gradlew.bat assembleDebug && gradlew.bat bundleRelease && cd ..",
+    "open-apk": "start android\\app\\build\\outputs\\apk\\debug",
+    "aab": "cd android && gradlew.bat bundleRelease && cd ..",
+    "open-aab": "start android\\app\\build\\outputs\\bundle\\release",
+    "clean": "cd android && gradlew.bat clean"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0",
+    "@heroicons/react": "^2.2.0",
+    "@tanstack/react-query": "^5.90.12",
+    "convex": "^1.31.2",
+    "firebase": "^12.7.0",
+    "lucide-react": "^0.554.0",
+    "next": "16.0.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

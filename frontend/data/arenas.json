@@ -1,0 +1,117 @@
+{
+  "arenas": [
+    {
+      "id": 1,
+      "name": "Bronz Arena",
+      "minTrophies": 0,
+      "maxTrophies": 299,
+      "icon": "🥉",
+      "color": "from-amber-700 to-amber-900",
+      "bgColor": "bg-amber-900/30",
+      "unlocks": []
+    },
+    {
+      "id": 2,
+      "name": "Gümüş Arena",
+      "minTrophies": 300,
+      "maxTrophies": 599,
+      "icon": "🥈",
+      "color": "from-slate-300 to-slate-500",
+      "bgColor": "bg-slate-600/30",
+      "unlocks": ["hint"]
+    },
+    {
+      "id": 3,
+      "name": "Altın Arena",
+      "minTrophies": 600,
+      "maxTrophies": 999,
+      "icon": "🥇",
+      "color": "from-yellow-400 to-yellow-600",
+      "bgColor": "bg-yellow-900/30",
+      "unlocks": ["shake"]
+    },
+    {
+      "id": 4,
+      "name": "Platin Arena",
+      "minTrophies": 1000,
+      "maxTrophies": 1499,
+      "icon": "💎",
+      "color": "from-cyan-400 to-cyan-600",
+      "bgColor": "bg-cyan-900/30",
+      "unlocks": ["double_points"]
+    },
+    {
+      "id": 5,
+      "name": "Elmas Arena",
+      "minTrophies": 1500,
+      "maxTrophies": 2099,
+      "icon": "💠",
+      "color": "from-blue-400 to-purple-600",
+      "bgColor": "bg-blue-900/30",
+      "unlocks": ["freeze"]
+    },
+    {
+      "id": 6,
+      "name": "Efsane Arena",
+      "minTrophies": 2100,
+      "maxTrophies": 2999,
+      "icon": "👑",
+      "color": "from-purple-500 to-pink-600",
+      "bgColor": "bg-purple-900/30",
+      "unlocks": ["reveal_word"]
+    },
+    {
+      "id": 7,
+      "name": "Şampiyon Arena",
+      "minTrophies": 3000,
+      "maxTrophies": 99999,
+      "icon": "🏆",
+      "color": "from-orange-500 via-red-500 to-pink-500",
+      "bgColor": "bg-orange-900/30",
+      "unlocks": ["all_modes"]
+    }
+  ],
+  "features": {
+    "hint": {
+      "name": "İpucu",
+      "description": "Bir harfi ortaya çıkar",
+      "icon": "💡",
+      "requiredArena": 2
+    },
+    "shake": {
+      "name": "Sarsıntı",
+      "description": "Rakibin ekranını sars",
+      "icon": "📳",
+      "requiredArena": 3
+    },
+    "double_points": {
+      "name": "2x Puan",
+      "description": "Kazanılan kupayı ikiye katla",
+      "icon": "✨",
+      "requiredArena": 4
+    },
+    "freeze": {
+      "name": "Dondur",
+      "description": "Rakibi 3 saniye dondur",
+      "icon": "❄️",
+      "requiredArena": 5
+    },
+    "reveal_word": {
+      "name": "Kelime İfşa",
+      "description": "Rakibin kelimesinin bir harfini gör",
+      "icon": "👁️",
+      "requiredArena": 6
+    },
+    "all_modes": {
+      "name": "Tüm Modlar",
+      "description": "Tüm özellikler açık",
+      "icon": "🌟",
+      "requiredArena": 7
+    }
+  },
+  "trophyRewards": {
+    "win": 30,
+    "lose": -15,
+    "draw": 5
+  }
+}

@@ -1,0 +1,910 @@
+{
+  "generated_at": "2025-12-20T23:12:25.365288",
+  "start_date": "23.11.2025",
+  "end_date": "02.03.2026",
+  "total_days": 100,
+  "words_per_day": 4,
+  "cooldown_days": 20,
+  "daily_quordle": [
+    {
+      "date": "23.11.2025",
+      "words": [
+        "çiçek",
+        "yirmi",
+        "küfür",
+        "çamur"
+      ]
+    },
+    {
+      "date": "24.11.2025",
+      "words": [
+        "makam",
+        "sahip",
+        "bravo",
+        "başak"
+      ]
+    },
+    {
+      "date": "25.11.2025",
+      "words": [
+        "merak",
+        "yatak",
+        "çıkma",
+        "hızla"
+      ]
+    },
+    {
+      "date": "26.11.2025",
+      "words": [
+        "bütün",
+        "türlü",
+        "ceket",
+        "gölge"
+      ]
+    },
+    {
+      "date": "27.11.2025",
+      "words": [
+        "idare",
+        "virüs",
+        "adres",
+        "vergi"
+      ]
+    },
+    {
+      "date": "28.11.2025",
+      "words": [
+        "verdi",
+        "yoksa",
+        "kışın",
+        "forma"
+      ]
+    },
+    {
+      "date": "29.11.2025",
+      "words": [
+        "lazım",
+        "sonra",
+        "satır",
+        "damla"
+      ]
+    },
+    {
+      "date": "30.11.2025",
+      "words": [
+        "malum",
+        "hafız",
+        "ihlal",
+        "dönem"
+      ]
+    },
+    {
+      "date": "01.12.2025",
+      "words": [
+        "memur",
+        "şahsi",
+        "ıssız",
+        "yazar"
+      ]
+    },
+    {
+      "date": "02.12.2025",
+      "words": [
+        "komik",
+        "plaka",
+        "köfte",
+        "demek"
+      ]
+    },
+    {
+      "date": "03.12.2025",
+      "words": [
+        "tünel",
+        "layık",
+        "aynen",
+        "dönme"
+      ]
+    },
+    {
+      "date": "04.12.2025",
+      "words": [
+        "aşağı",
+        "sorma",
+        "yüzlü",
+        "açlık"
+      ]
+    },
+    {
+      "date": "05.12.2025",
+      "words": [
+        "rakip",
+        "hazır",
+        "genel",
+        "elbet"
+      ]
+    },
+    {
+      "date": "06.12.2025",
+      "words": [
+        "tamir",
+        "temas",
+        "giriş",
+        "bilir"
+      ]
+    },
+    {
+      "date": "07.12.2025",
+      "words": [
+        "şekil",
+        "ırkçı",
+        "sabit",
+        "temiz"
+      ]
+    },
+    {
+      "date": "08.12.2025",
+      "words": [
+        "hakan",
+        "çeşit",
+        "sudan",
+        "buhar"
+      ]
+    },
+    {
+      "date": "09.12.2025",
+      "words": [
+        "fazla",
+        "doğan",
+        "tutma",
+        "mesai"
+      ]
+    },
+    {
+      "date": "10.12.2025",
+      "words": [
+        "hızlı",
+        "şirin",
+        "şeker",
+        "dünkü"
+      ]
+    },
+    {
+      "date": "11.12.2025",
+      "words": [
+        "sivil",
+        "değil",
+        "çukur",
+        "rahat"
+      ]
+    },
+    {
+      "date": "12.12.2025",
+      "words": [
+        "galip",
+        "diğer",
+        "delik",
+        "havlu"
+      ]
+    },
+    {
+      "date": "13.12.2025",
+      "words": [
+        "nasip",
+        "izzet",
+        "bizde",
+        "ilahi"
+      ]
+    },
+    {
+      "date": "14.12.2025",
+      "words": [
+        "kaplı",
+        "kitle",
+        "örgüt",
+        "eşsiz"
+      ]
+    },
+    {
+      "date": "15.12.2025",
+      "words": [
+        "çelik",
+        "yenik",
+        "hitap",
+        "tarif"
+      ]
+    },
+    {
+      "date": "16.12.2025",
+      "words": [
+        "katlı",
+        "sergi",
+        "takip",
+        "şarkı"
+      ]
+    },
+    {
+      "date": "17.12.2025",
+      "words": [
+        "altın",
+        "tanık",
+        "hamur",
+        "saklı"
+      ]
+    },
+    {
+      "date": "18.12.2025",
+      "words": [
+        "yurdu",
+        "doğru",
+        "gelin",
+        "sayın"
+      ]
+    },
+    {
+      "date": "19.12.2025",
+      "words": [
+        "ekmek",
+        "bitki",
+        "temel",
+        "sevgi"
+      ]
+    },
+    {
+      "date": "20.12.2025",
+      "words": [
+        "basın",
+        "beton",
+        "karar",
+        "tahta"
+      ]
+    },
+    {
+      "date": "21.12.2025",
+      "words": [
+        "nöbet",
+        "sağır",
+        "adama",
+        "sakın"
+      ]
+    },
+    {
+      "date": "22.12.2025",
+      "words": [
+        "zaten",
+        "iflas",
+        "tanrı",
+        "doğal"
+      ]
+    },
+    {
+      "date": "23.12.2025",
+      "words": [
+        "damla",
+        "içmek",
+        "özgür",
+        "zirve"
+      ]
+    },
+    {
+      "date": "24.12.2025",
+      "words": [
+        "sevda",
+        "soğuk",
+        "pasta",
+        "ortak"
+      ]
+    },
+    {
+      "date": "25.12.2025",
+      "words": [
+        "topçu",
+        "panik",
+        "frank",
+        "yalan"
+      ]
+    },
+    {
+      "date": "26.12.2025",
+      "words": [
+        "bıçak",
+        "terfi",
+        "anlık",
+        "şayet"
+      ]
+    },
+    {
+      "date": "27.12.2025",
+      "words": [
+        "dayak",
+        "madde",
+        "kendi",
+        "polis"
+      ]
+    },
+    {
+      "date": "28.12.2025",
+      "words": [
+        "liman",
+        "lanet",
+        "sokak",
+        "yolcu"
+      ]
+    },
+    {
+      "date": "29.12.2025",
+      "words": [
+        "rakam",
+        "düşme",
+        "aktif",
+        "bakma"
+      ]
+    },
+    {
+      "date": "30.12.2025",
+      "words": [
+        "çıkma",
+        "çorap",
+        "hülya",
+        "dilek"
+      ]
+    },
+    {
+      "date": "31.12.2025",
+      "words": [
+        "fazla",
+        "şerif",
+        "dünya",
+        "güçlü"
+      ]
+    },
+    {
+      "date": "01.01.2026",
+      "words": [
+        "başta",
+        "yasak",
+        "fayda",
+        "aynen"
+      ]
+    },
+    {
+      "date": "02.01.2026",
+      "words": [
+        "duman",
+        "meral",
+        "bolca",
+        "bence"
+      ]
+    },
+    {
+      "date": "03.01.2026",
+      "words": [
+        "bunda",
+        "nesne",
+        "üçgen",
+        "hanım"
+      ]
+    },
+    {
+      "date": "04.01.2026",
+      "words": [
+        "mizah",
+        "durum",
+        "taciz",
+        "özgün"
+      ]
+    },
+    {
+      "date": "05.01.2026",
+      "words": [
+        "ortam",
+        "malum",
+        "öğlen",
+        "aydın"
+      ]
+    },
+    {
+      "date": "06.01.2026",
+      "words": [
+        "karma",
+        "eylül",
+        "demek",
+        "köylü"
+      ]
+    },
+    {
+      "date": "07.01.2026",
+      "words": [
+        "kayıp",
+        "yüzme",
+        "fizik",
+        "desen"
+      ]
+    },
+    {
+      "date": "08.01.2026",
+      "words": [
+        "namaz",
+        "görme",
+        "değer",
+        "sınıf"
+      ]
+    },
+    {
+      "date": "09.01.2026",
+      "words": [
+        "tarif",
+        "biçim",
+        "sinek",
+        "mısır"
+      ]
+    },
+    {
+      "date": "10.01.2026",
+      "words": [
+        "işsiz",
+        "ileri",
+        "vakit",
+        "haluk"
+      ]
+    },
+    {
+      "date": "11.01.2026",
+      "words": [
+        "parti",
+        "başlı",
+        "müdür",
+        "konut"
+      ]
+    },
+    {
+      "date": "12.01.2026",
+      "words": [
+        "cevap",
+        "kalan",
+        "delil",
+        "dokuz"
+      ]
+    },
+    {
+      "date": "13.01.2026",
+      "words": [
+        "sudan",
+        "aracı",
+        "etkin",
+        "nakit"
+      ]
+    },
+    {
+      "date": "14.01.2026",
+      "words": [
+        "hepsi",
+        "ihmal",
+        "emlak",
+        "kulak"
+      ]
+    },
+    {
+      "date": "15.01.2026",
+      "words": [
+        "sonuç",
+        "nokta",
+        "takip",
+        "dönme"
+      ]
+    },
+    {
+      "date": "16.01.2026",
+      "words": [
+        "soylu",
+        "hüküm",
+        "cümle",
+        "ölçüm"
+      ]
+    },
+    {
+      "date": "17.01.2026",
+      "words": [
+        "günah",
+        "çünkü",
+        "celal",
+        "neden"
+      ]
+    },
+    {
+      "date": "18.01.2026",
+      "words": [
+        "katlı",
+        "dönem",
+        "olmaz",
+        "satış"
+      ]
+    },
+    {
+      "date": "19.01.2026",
+      "words": [
+        "ilahi",
+        "bilgi",
+        "serin",
+        "giyim"
+      ]
+    },
+    {
+      "date": "20.01.2026",
+      "words": [
+        "bilge",
+        "sabit",
+        "lazer",
+        "oraya"
+      ]
+    },
+    {
+      "date": "21.01.2026",
+      "words": [
+        "tanrı",
+        "hadis",
+        "evcil",
+        "albay"
+      ]
+    },
+    {
+      "date": "22.01.2026",
+      "words": [
+        "evrim",
+        "boyun",
+        "hayat",
+        "gelen"
+      ]
+    },
+    {
+      "date": "23.01.2026",
+      "words": [
+        "rakam",
+        "yalın",
+        "verme",
+        "asist"
+      ]
+    },
+    {
+      "date": "24.01.2026",
+      "words": [
+        "gerçi",
+        "sebze",
+        "cesur",
+        "şerif"
+      ]
+    },
+    {
+      "date": "25.01.2026",
+      "words": [
+        "kulüp",
+        "haber",
+        "kürek",
+        "espri"
+      ]
+    },
+    {
+      "date": "26.01.2026",
+      "words": [
+        "diken",
+        "bizde",
+        "alkol",
+        "düşük"
+      ]
+    },
+    {
+      "date": "27.01.2026",
+      "words": [
+        "virüs",
+        "güven",
+        "takma",
+        "aylık"
+      ]
+    },
+    {
+      "date": "28.01.2026",
+      "words": [
+        "geçme",
+        "layık",
+        "zenci",
+        "sayın"
+      ]
+    },
+    {
+      "date": "29.01.2026",
+      "words": [
+        "iyice",
+        "evvel",
+        "çaplı",
+        "çoklu"
+      ]
+    },
+    {
+      "date": "30.01.2026",
+      "words": [
+        "cihaz",
+        "köpek",
+        "şapka",
+        "saygı"
+      ]
+    },
+    {
+      "date": "31.01.2026",
+      "words": [
+        "madde",
+        "ihlal",
+        "yorum",
+        "pasif"
+      ]
+    },
+    {
+      "date": "01.02.2026",
+      "words": [
+        "sinek",
+        "rahat",
+        "moral",
+        "deney"
+      ]
+    },
+    {
+      "date": "02.02.2026",
+      "words": [
+        "mikro",
+        "niyet",
+        "nişan",
+        "hayal"
+      ]
+    },
+    {
+      "date": "03.02.2026",
+      "words": [
+        "melek",
+        "zaman",
+        "kuzey",
+        "diğer"
+      ]
+    },
+    {
+      "date": "04.02.2026",
+      "words": [
+        "uzman",
+        "zihin",
+        "geçiş",
+        "dünya"
+      ]
+    },
+    {
+      "date": "05.02.2026",
+      "words": [
+        "recep",
+        "hariç",
+        "düzen",
+        "çubuk"
+      ]
+    },
+    {
+      "date": "06.02.2026",
+      "words": [
+        "zorlu",
+        "gayet",
+        "tatil",
+        "hızlı"
+      ]
+    },
+    {
+      "date": "07.02.2026",
+      "words": [
+        "kanal",
+        "kömür",
+        "insan",
+        "kayıt"
+      ]
+    },
+    {
+      "date": "08.02.2026",
+      "words": [
+        "mezun",
+        "yazım",
+        "çalar",
+        "örgüt"
+      ]
+    },
+    {
+      "date": "09.02.2026",
+      "words": [
+        "rezil",
+        "tütün",
+        "zarar",
+        "üzücü"
+      ]
+    },
+    {
+      "date": "10.02.2026",
+      "words": [
+        "izzet",
+        "utanç",
+        "köklü",
+        "seyir"
+      ]
+    },
+    {
+      "date": "11.02.2026",
+      "words": [
+        "kadir",
+        "meyve",
+        "acele",
+        "şahsi"
+      ]
+    },
+    {
+      "date": "12.02.2026",
+      "words": [
+        "kolay",
+        "sözlü",
+        "tanık",
+        "marka"
+      ]
+    },
+    {
+      "date": "13.02.2026",
+      "words": [
+        "sizde",
+        "duygu",
+        "asist",
+        "sokak"
+      ]
+    },
+    {
+      "date": "14.02.2026",
+      "words": [
+        "meral",
+        "kalma",
+        "eksik",
+        "değer"
+      ]
+    },
+    {
+      "date": "15.02.2026",
+      "words": [
+        "çanak",
+        "erdem",
+        "bilet",
+        "topla"
+      ]
+    },
+    {
+      "date": "16.02.2026",
+      "words": [
+        "frank",
+        "damat",
+        "ideal",
+        "ölmek"
+      ]
+    },
+    {
+      "date": "17.02.2026",
+      "words": [
+        "çiçek",
+        "tablo",
+        "takma",
+        "parça"
+      ]
+    },
+    {
+      "date": "18.02.2026",
+      "words": [
+        "eylem",
+        "güçlü",
+        "video",
+        "haklı"
+      ]
+    },
+    {
+      "date": "19.02.2026",
+      "words": [
+        "ilhan",
+        "mısır",
+        "içeri",
+        "sanki"
+      ]
+    },
+    {
+      "date": "20.02.2026",
+      "words": [
+        "yurdu",
+        "başka",
+        "şehit",
+        "bakma"
+      ]
+    },
+    {
+      "date": "21.02.2026",
+      "words": [
+        "türlü",
+        "kaçar",
+        "onlar",
+        "tahta"
+      ]
+    },
+    {
+      "date": "22.02.2026",
+      "words": [
+        "kural",
+        "soluk",
+        "çağrı",
+        "koyun"
+      ]
+    },
+    {
+      "date": "23.02.2026",
+      "words": [
+        "özlem",
+        "kurum",
+        "demir",
+        "şerif"
+      ]
+    },
+    {
+      "date": "24.02.2026",
+      "words": [
+        "nefes",
+        "forma",
+        "böcek",
+        "konut"
+      ]
+    },
+    {
+      "date": "25.02.2026",
+      "words": [
+        "yenik",
+        "dosya",
+        "mesut",
+        "lakin"
+      ]
+    },
+    {
+      "date": "26.02.2026",
+      "words": [
+        "olası",
+        "hedef",
+        "birey",
+        "türkü"
+      ]
+    },
+    {
+      "date": "27.02.2026",
+      "words": [
+        "aşama",
+        "diken",
+        "yürek",
+        "üzeri"
+      ]
+    },
+    {
+      "date": "28.02.2026",
+      "words": [
+        "sence",
+        "necip",
+        "sakin",
+        "savcı"
+      ]
+    },
+    {
+      "date": "01.03.2026",
+      "words": [
+        "vakıf",
+        "beyin",
+        "nihai",
+        "barış"
+      ]
+    },
+    {
+      "date": "02.03.2026",
+      "words": [
+        "kazım",
+        "başlı",
+        "bozuk",
+        "tokat"
+      ]
+    }
+  ]
+}

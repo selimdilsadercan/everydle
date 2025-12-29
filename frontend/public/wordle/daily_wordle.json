@@ -1,0 +1,408 @@
+{
+  "generated_at": "2025-12-20T23:09:51.483589",
+  "start_date": "23.11.2025",
+  "end_date": "02.03.2026",
+  "total_days": 100,
+  "daily_words": [
+    {
+      "date": "23.11.2025",
+      "word": "yarış"
+    },
+    {
+      "date": "24.11.2025",
+      "word": "video"
+    },
+    {
+      "date": "25.11.2025",
+      "word": "yedek"
+    },
+    {
+      "date": "26.11.2025",
+      "word": "koyun"
+    },
+    {
+      "date": "27.11.2025",
+      "word": "isyan"
+    },
+    {
+      "date": "28.11.2025",
+      "word": "motor"
+    },
+    {
+      "date": "29.11.2025",
+      "word": "konuk"
+    },
+    {
+      "date": "30.11.2025",
+      "word": "yavuz"
+    },
+    {
+      "date": "01.12.2025",
+      "word": "sayın"
+    },
+    {
+      "date": "02.12.2025",
+      "word": "sebep"
+    },
+    {
+      "date": "03.12.2025",
+      "word": "sever"
+    },
+    {
+      "date": "04.12.2025",
+      "word": "altın"
+    },
+    {
+      "date": "05.12.2025",
+      "word": "medya"
+    },
+    {
+      "date": "06.12.2025",
+      "word": "haklı"
+    },
+    {
+      "date": "07.12.2025",
+      "word": "saçma"
+    },
+    {
+      "date": "08.12.2025",
+      "word": "metro"
+    },
+    {
+      "date": "09.12.2025",
+      "word": "sinir"
+    },
+    {
+      "date": "10.12.2025",
+      "word": "sanat"
+    },
+    {
+      "date": "11.12.2025",
+      "word": "köpek"
+    },
+    {
+      "date": "12.12.2025",
+      "word": "terim"
+    },
+    {
+      "date": "13.12.2025",
+      "word": "kirli"
+    },
+    {
+      "date": "14.12.2025",
+      "word": "canlı"
+    },
+    {
+      "date": "15.12.2025",
+      "word": "hatta"
+    },
+    {
+      "date": "16.12.2025",
+      "word": "basit"
+    },
+    {
+      "date": "17.12.2025",
+      "word": "duvar"
+    },
+    {
+      "date": "18.12.2025",
+      "word": "beden"
+    },
+    {
+      "date": "19.12.2025",
+      "word": "küçük"
+    },
+    {
+      "date": "20.12.2025",
+      "word": "mesaj"
+    },
+    {
+      "date": "21.12.2025",
+      "word": "final"
+    },
+    {
+      "date": "22.12.2025",
+      "word": "tamir"
+    },
+    {
+      "date": "23.12.2025",
+      "word": "haber"
+    },
+    {
+      "date": "24.12.2025",
+      "word": "hızla"
+    },
+    {
+      "date": "25.12.2025",
+      "word": "tarih"
+    },
+    {
+      "date": "26.12.2025",
+      "word": "tepki"
+    },
+    {
+      "date": "27.12.2025",
+      "word": "selim"
+    },
+    {
+      "date": "28.12.2025",
+      "word": "bakan"
+    },
+    {
+      "date": "29.12.2025",
+      "word": "yaşlı"
+    },
+    {
+      "date": "30.12.2025",
+      "word": "hangi"
+    },
+    {
+      "date": "31.12.2025",
+      "word": "sıcak"
+    },
+    {
+      "date": "01.01.2026",
+      "word": "testi"
+    },
+    {
+      "date": "02.01.2026",
+      "word": "doğru"
+    },
+    {
+      "date": "03.01.2026",
+      "word": "hesap"
+    },
+    {
+      "date": "04.01.2026",
+      "word": "milli"
+    },
+    {
+      "date": "05.01.2026",
+      "word": "uzman"
+    },
+    {
+      "date": "06.01.2026",
+      "word": "bilet"
+    },
+    {
+      "date": "07.01.2026",
+      "word": "çekim"
+    },
+    {
+      "date": "08.01.2026",
+      "word": "davet"
+    },
+    {
+      "date": "09.01.2026",
+      "word": "başta"
+    },
+    {
+      "date": "10.01.2026",
+      "word": "müzik"
+    },
+    {
+      "date": "11.01.2026",
+      "word": "talep"
+    },
+    {
+      "date": "12.01.2026",
+      "word": "şarkı"
+    },
+    {
+      "date": "13.01.2026",
+      "word": "tıpkı"
+    },
+    {
+      "date": "14.01.2026",
+      "word": "fakat"
+    },
+    {
+      "date": "15.01.2026",
+      "word": "saray"
+    },
+    {
+      "date": "16.01.2026",
+      "word": "araba"
+    },
+    {
+      "date": "17.01.2026",
+      "word": "kayıt"
+    },
+    {
+      "date": "18.01.2026",
+      "word": "yazma"
+    },
+    {
+      "date": "19.01.2026",
+      "word": "verme"
+    },
+    {
+      "date": "20.01.2026",
+      "word": "polis"
+    },
+    {
+      "date": "21.01.2026",
+      "word": "sınır"
+    },
+    {
+      "date": "22.01.2026",
+      "word": "yeşil"
+    },
+    {
+      "date": "23.01.2026",
+      "word": "oraya"
+    },
+    {
+      "date": "24.01.2026",
+      "word": "hariç"
+    },
+    {
+      "date": "25.01.2026",
+      "word": "yerel"
+    },
+    {
+      "date": "26.01.2026",
+      "word": "sizce"
+    },
+    {
+      "date": "27.01.2026",
+      "word": "giren"
+    },
+    {
+      "date": "28.01.2026",
+      "word": "fazla"
+    },
+    {
+      "date": "29.01.2026",
+      "word": "masum"
+    },
+    {
+      "date": "30.01.2026",
+      "word": "selam"
+    },
+    {
+      "date": "31.01.2026",
+      "word": "toplu"
+    },
+    {
+      "date": "01.02.2026",
+      "word": "kolay"
+    },
+    {
+      "date": "02.02.2026",
+      "word": "kadir"
+    },
+    {
+      "date": "03.02.2026",
+      "word": "resim"
+    },
+    {
+      "date": "04.02.2026",
+      "word": "böyle"
+    },
+    {
+      "date": "05.02.2026",
+      "word": "sadık"
+    },
+    {
+      "date": "06.02.2026",
+      "word": "rapor"
+    },
+    {
+      "date": "07.02.2026",
+      "word": "tarif"
+    },
+    {
+      "date": "08.02.2026",
+      "word": "darbe"
+    },
+    {
+      "date": "09.02.2026",
+      "word": "huzur"
+    },
+    {
+      "date": "10.02.2026",
+      "word": "alkol"
+    },
+    {
+      "date": "11.02.2026",
+      "word": "bağlı"
+    },
+    {
+      "date": "12.02.2026",
+      "word": "yirmi"
+    },
+    {
+      "date": "13.02.2026",
+      "word": "bilgi"
+    },
+    {
+      "date": "14.02.2026",
+      "word": "olmuş"
+    },
+    {
+      "date": "15.02.2026",
+      "word": "adına"
+    },
+    {
+      "date": "16.02.2026",
+      "word": "nesil"
+    },
+    {
+      "date": "17.02.2026",
+      "word": "mayıs"
+    },
+    {
+      "date": "18.02.2026",
+      "word": "dönüş"
+    },
+    {
+      "date": "19.02.2026",
+      "word": "yavaş"
+    },
+    {
+      "date": "20.02.2026",
+      "word": "sifon"
+    },
+    {
+      "date": "21.02.2026",
+      "word": "sefer"
+    },
+    {
+      "date": "22.02.2026",
+      "word": "güneş"
+    },
+    {
+      "date": "23.02.2026",
+      "word": "vücut"
+    },
+    {
+      "date": "24.02.2026",
+      "word": "sabah"
+    },
+    {
+      "date": "25.02.2026",
+      "word": "duygu"
+    },
+    {
+      "date": "26.02.2026",
+      "word": "aracı"
+    },
+    {
+      "date": "27.02.2026",
+      "word": "tuhaf"
+    },
+    {
+      "date": "28.02.2026",
+      "word": "kanun"
+    },
+    {
+      "date": "01.03.2026",
+      "word": "nisan"
+    },
+    {
+      "date": "02.03.2026",
+      "word": "doğan"
+    }
+  ]
+}
