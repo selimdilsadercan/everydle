@@ -1,6 +1,8 @@
 import { MetadataRoute } from 'next'
 import gamesData from '@/data/games.json'
 
+export const dynamic = 'force-static'
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://playeverydle.com'
   const games = Object.keys(gamesData.games)
