@@ -1,0 +1,42 @@
+[?9001h[?1004h[?25l[2J[m[35m[2m[H$[m[1m[2m[1Cnext build
+]0;C:\Users\Lenovo\.bun\bin\bun.exe[?25h[22m[?25l [33m[1m⚠[m Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\Lenovo\Desktop\everydle\bun.lock as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\Lenovo\Desktop\everydle\frontend\package-lock.json[12;1H[?25h   [38;2;173;127;168m[1m▲ Next.js 16.0.10[m (Turbopack)
+[?25l   - Environments: .env.local[15;1H[?25h [37m[1m [m Creating an optimized production build ...
+ [32m[1m✓[m Compiled successfully in 2.1s
+ [37m[1m [m Running TypeScript  [36m.[?25l[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [37m[1m [m Running TypeScript  [36m...[m[K[89C [37m[1m [m Running TypeScript  [36m.[m[K[89C [37m[1m [m Running TypeScript  [36m..[m[K[89C [32m[1m✓[m Finished TypeScript in 4.6s[K
+ [37m[1m [m Collecting page data using 19 workers  [36m.[m[K[89C [37m[1m [m Collecting page data using 19 workers  [36m..[m[K[89C [37m[1m [m Collecting page data using 19 workers  [36m...[m[K[89C [37m[1m [m Collecting page data using 19 workers  [36m.[m[K[89C [32m[1m✓[m Collecting page data using 19 workers in 802.8ms    
+[?25h [37m[1m [m Generating static pages using 19 workers (0/24)  [36m[    ][?25l[m[K[89C [37m[1m [m Generating static pages using 19 workers (0/24)  [36m[=   ][m[K[89C [37m[1m [m Generating static pages using 19 workers (0/24)  [36m[==  ][m[K[89C [37m[1m [m Generating static pages using 19 workers (8/24)  [36m[=== ][m[K[89C [37m[1m [m Generating static pages using 19 workers (16/24)  [36m[ ===][m [32m[1m✓[m Generating static pages using 19 workers (24/24) in 827.2ms[K
+[?25h [37m[1m [m Finalizing page optimization  [36m.[?25l[m[K[89C [37m[1m [m Finalizing page optimization  [36m..[m[K[89C [32m[1m✓[m Finalizing page optimization in 400.4ms    [?25h
+
+[4mRoute (app)[24m[K
+┌ ○ /
+├ ○ /_not-found
+├ ○ /challenge
+├ ○ /friends/add
+├ ○ /games
+├ ○ /games/contexto
+├ ○ /games/moviedle
+├ ○ /games/nerdle
+├ ○ /games/octordle
+├ ○ /games/pokerdle
+├ ○ /games/quordle
+├ ○ /games/redactle
+├ ○ /games/wordle
+├ ○ /levels
+├ ○ /manifest.webmanifest
+├ ○ /match/wordle
+├ ○ /oauth-native-callback
+├ ○ /profile
+├ ○ /robots.txt
+├ ○ /sitemap.xml
+├ ○ /sso-callback
+└ ○ /store
+
+
+○  (Static)  prerendered as static content
+
+[?9001l[?1004l

@@ -11,8 +11,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "generate": "turbo run generate",
-    "mobile": "turbo run mobile --filter=@everydle/frontend",
-    "store": "turbo run store --filter=@everydle/frontend",
+    "mobile": "cd frontend && bun run mobile",
+    "store": "cd frontend && bun run store",
     "ios": "turbo run ios --filter=@everydle/frontend",
     "clean": "turbo run clean"
   },

@@ -5,17 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next startd",
+    "start": "next start",
     "lint": "eslint",
     "generate": "encore gen client everydle-qnxi -e staging --output=./lib/client.ts",
     "ios": "next build --turbopack && npx cap sync && npx cap open ios",
-    "mobile": "next build --turbopack && npx cap sync && npm run apk && npm run open-apk",
-    "store": "next build --turbopack && npx cap sync && npm run apk && npm run open-aab",
-    "apk": "cd android && gradlew.bat assembleDebug && gradlew.bat bundleRelease && cd ..",
-    "open-apk": "start android\\app\\build\\outputs\\apk\\debug",
-    "aab": "cd android && gradlew.bat bundleRelease && cd ..",
-    "open-aab": "start android\\app\\build\\outputs\\bundle\\release",
-    "clean": "cd android && gradlew.bat clean"
+    "mobile": "next build --turbopack && bun x cap sync && bun run apk && bun run open-apk",
+    "store": "next build --turbopack && bun x cap sync && bun run apk && bun run open-aab",
+    "apk": "cd android && cmd /c gradlew.bat assembleDebug && cmd /c gradlew.bat bundleRelease && cd ..",
+    "open-apk": "powershell -Command \"ii android/app/build/outputs/apk/debug\"",
+    "aab": "cd android && cmd /c gradlew.bat bundleRelease && cd ..",
+    "open-aab": "powershell -Command \"ii android/app/build/outputs/bundle/release\"",
+    "clean": "cd android && cmd /c gradlew.bat clean"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
