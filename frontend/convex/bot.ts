@@ -6,6 +6,7 @@ import { Id } from "./_generated/dataModel";
 
 // Bot zorluk seviyeleri - tahminler arası bekleme süresi (ms)
 const BOT_DIFFICULTY = {
+  very_easy: { minDelay: 10000, maxDelay: 20000, mistakeChance: 0.5, failChance: 0.4 }, // Çok Kolay - %40 ihtimalle bulamaz
   easy: { minDelay: 8000, maxDelay: 15000, mistakeChance: 0.3, failChance: 0.2 },    // Kolay - %20 ihtimalle bulamaz
   medium: { minDelay: 5000, maxDelay: 10000, mistakeChance: 0.15, failChance: 0.1 }, // Orta - %10 ihtimalle bulamaz
   hard: { minDelay: 2000, maxDelay: 5000, mistakeChance: 0.05, failChance: 0.05 },    // Zor - %5 ihtimalle bulamaz
@@ -70,7 +71,7 @@ export const startDirectBotMatch = mutation({
     playerTrophies: v.number(),
     botId: v.string(),
     botName: v.string(),
-    botDifficulty: v.union(v.literal("easy"), v.literal("medium"), v.literal("hard")),
+    botDifficulty: v.union(v.literal("very_easy"), v.literal("easy"), v.literal("medium"), v.literal("hard")),
   },
   handler: async (ctx, args) => {
     const playerOdaId = "user_" + Math.random().toString(36).substring(2, 15);
@@ -233,11 +234,13 @@ export const createBotMatch = internalMutation({
 
     // Kupa sayısına göre zorluk belirle
     const trophies = args.playerTrophies || 0;
-    let difficulty: "easy" | "medium" | "hard" = "medium";
+    let difficulty: "very_easy" | "easy" | "medium" | "hard" = "very_easy";
     
-    if (trophies < 600) {
+    if (trophies < 500) {
+      difficulty = "very_easy";
+    } else if (trophies < 1500) {
       difficulty = "easy";
-    } else if (trophies < 2100) {
+    } else if (trophies < 2500) {
       difficulty = "medium";
     } else {
       difficulty = "hard";
@@ -347,7 +350,7 @@ export const botMakeMove = internalMutation({
     matchId: v.id("matches"),
     botOdaId: v.string(),
     targetWord: v.string(),
-    difficulty: v.union(v.literal("easy"), v.literal("medium"), v.literal("hard")),
+    difficulty: v.union(v.literal("very_easy"), v.literal("easy"), v.literal("medium"), v.literal("hard")),
   },
   handler: async (ctx, args) => {
     // Maç hala aktif mi kontrol et

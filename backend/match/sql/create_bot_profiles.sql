@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS bot_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bot_name TEXT NOT NULL UNIQUE,
-    difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'medium', 'hard')),
+    difficulty TEXT NOT NULL CHECK (difficulty IN ('very_easy', 'easy', 'medium', 'hard')),
     trophies INTEGER DEFAULT 500,
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
@@ -22,15 +22,17 @@ CREATE INDEX IF NOT EXISTS idx_bot_profiles_difficulty ON bot_profiles(difficult
 -- =====================================================
 
 INSERT INTO bot_profiles (bot_name, difficulty, trophies) VALUES
-    ('👶 AcemiBot', 'easy', 150),
-    ('🌱 YeniBot', 'easy', 200),
-    ('🍵 ÇaylakBot', 'easy', 250),
-    ('🤖 WordleBot', 'medium', 500),
-    ('🎮 AkıllıBot', 'medium', 450),
-    ('🎯 UstaBot', 'medium', 550),
-    ('🧠 ZekiBot', 'hard', 850),
-    ('⚡ HızlıBot', 'hard', 900),
-    ('🏆 ŞampiyonBot', 'hard', 1000)
+    ('👶 AcemiBot', 'very_easy', 50),
+    ('🌱 YeniBot', 'very_easy', 100),
+    ('🍵 ÇaylakBot', 'very_easy', 150),
+    ('🧪 DenemeBot', 'easy', 300),
+    ('🎮 OyuncuBot', 'easy', 400),
+    ('🤖 WordleBot', 'medium', 1500),
+    ('🧠 ZekiBot', 'medium', 1800),
+    ('⚡ HızlıBot', 'medium', 2000),
+    ('🎯 UstaBot', 'hard', 2600),
+    ('🏆 ŞampiyonBot', 'hard', 3000),
+    ('💎 EfsaneBot', 'hard', 3500)
 ON CONFLICT (bot_name) DO NOTHING;
 
 -- Trigger to auto-update updated_at

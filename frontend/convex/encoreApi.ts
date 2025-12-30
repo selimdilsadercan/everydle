@@ -51,7 +51,7 @@ export const getRandomBot = internalAction({
   handler: async (ctx, args): Promise<{
     id: string;
     bot_name: string;
-    difficulty: "easy" | "medium" | "hard";
+    difficulty: "very_easy" | "easy" | "medium" | "hard";
     trophies: number;
   } | null> => {
     console.log("getRandomBot action called:", { difficulty: args.difficulty });

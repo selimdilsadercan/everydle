@@ -8,7 +8,7 @@ import { supabase } from "../db/supabase"
 export interface BotProfile {
     id: string
     bot_name: string
-    difficulty: 'easy' | 'medium' | 'hard'
+    difficulty: 'very_easy' | 'easy' | 'medium' | 'hard'
     trophies: number
     wins: number
     losses: number
@@ -33,7 +33,7 @@ export interface GetBotProfileResponse {
 }
 
 export interface GetAllBotsRequest {
-    difficulty?: 'easy' | 'medium' | 'hard'
+    difficulty?: 'very_easy' | 'easy' | 'medium' | 'hard'
 }
 
 export interface GetAllBotsResponse {
@@ -43,7 +43,7 @@ export interface GetAllBotsResponse {
 }
 
 export interface GetRandomBotRequest {
-    difficulty?: 'easy' | 'medium' | 'hard'
+    difficulty?: 'very_easy' | 'easy' | 'medium' | 'hard'
 }
 
 export interface GetRandomBotResponse {

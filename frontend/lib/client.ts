@@ -811,7 +811,7 @@ export namespace match {
     export interface BotProfile {
         id: string
         "bot_name": string
-        difficulty: "easy" | "medium" | "hard"
+        difficulty: "very_easy" | "easy" | "medium" | "hard"
         trophies: number
         wins: number
         losses: number
@@ -820,7 +820,7 @@ export namespace match {
     }
 
     export interface GetAllBotsRequest {
-        difficulty?: "easy" | "medium" | "hard"
+        difficulty?: "very_easy" | "easy" | "medium" | "hard"
     }
 
     export interface GetAllBotsResponse {
@@ -836,7 +836,7 @@ export namespace match {
     }
 
     export interface GetRandomBotRequest {
-        difficulty?: "easy" | "medium" | "hard"
+        difficulty?: "very_easy" | "easy" | "medium" | "hard"
     }
 
     export interface GetRandomBotResponse {

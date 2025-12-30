@@ -301,7 +301,7 @@ export default function ChallengePage() {
         playerTrophies: trophies,
         botId: selectedBot.user_id,
         botName: selectedBot.username || selectedBot.name || "Bot",
-        botDifficulty: (selectedBot.difficulty as "easy" | "medium" | "hard") || "medium",
+        botDifficulty: (selectedBot.difficulty as "very_easy" | "easy" | "medium" | "hard") || "medium",
       });
 
       if (result.success) {
@@ -976,7 +976,8 @@ export default function ChallengePage() {
             <div className={`h-2 bg-gradient-to-r ${
               selectedBot.difficulty === 'hard' ? 'from-red-500 to-orange-500' :
               selectedBot.difficulty === 'medium' ? 'from-blue-500 to-cyan-500' :
-              'from-emerald-500 to-teal-500'
+              selectedBot.difficulty === 'easy' ? 'from-emerald-500 to-teal-500' :
+              'from-slate-500 to-slate-600'
             }`} />
             
             <div className="p-6">
@@ -989,10 +990,12 @@ export default function ChallengePage() {
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                     selectedBot.difficulty === 'hard' ? 'bg-red-500/20 text-red-400' :
                     selectedBot.difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400' :
-                    'bg-emerald-500/20 text-emerald-400'
+                    selectedBot.difficulty === 'easy' ? 'bg-emerald-500/20 text-emerald-400' :
+                    'bg-slate-500/20 text-slate-400'
                   }`}>
                     {selectedBot.difficulty === 'hard' ? 'ZOR' : 
-                     selectedBot.difficulty === 'medium' ? 'ORTA' : 'KOLAY'}
+                     selectedBot.difficulty === 'medium' ? 'ORTA' : 
+                     selectedBot.difficulty === 'easy' ? 'KOLAY' : 'ÇOK KOLAY'}
                   </span>
                   <div className="flex items-center gap-1 text-yellow-400 font-bold">
                     <Trophy className="w-4 h-4" />

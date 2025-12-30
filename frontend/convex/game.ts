@@ -480,7 +480,7 @@ export const startNextRound = internalMutation({
         matchId: args.matchId,
         botOdaId,
         targetWord: args.nextWord,
-        difficulty: match.botDifficulty as "easy" | "medium" | "hard",
+        difficulty: match.botDifficulty as "very_easy" | "easy" | "medium" | "hard",
       });
     }
   },
