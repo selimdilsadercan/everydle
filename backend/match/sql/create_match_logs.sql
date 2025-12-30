@@ -5,13 +5,13 @@
 CREATE TABLE IF NOT EXISTS match_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id TEXT NOT NULL,
-    player1_id UUID NOT NULL,  -- User ID veya Bot ID
+    player1_id TEXT NOT NULL,  -- User ID veya Bot ID
     player1_type TEXT NOT NULL CHECK (player1_type IN ('user', 'bot')),
     player1_name TEXT NOT NULL,
-    player2_id UUID NOT NULL,  -- User ID veya Bot ID
+    player2_id TEXT NOT NULL,  -- User ID veya Bot ID
     player2_type TEXT NOT NULL CHECK (player2_type IN ('user', 'bot')),
     player2_name TEXT NOT NULL,
-    winner_id UUID,  -- NULL ise berabere
+    winner_id TEXT,  -- NULL ise berabere
     winner_type TEXT CHECK (winner_type IN ('user', 'bot')),
     player1_attempts INTEGER,
     player2_attempts INTEGER,

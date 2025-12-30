@@ -1,10 +1,10 @@
 -- =====================================================
 -- GET USER MATCH HISTORY - Kullanıcı maç geçmişi
 -- =====================================================
-DROP FUNCTION IF EXISTS get_user_match_history(UUID, INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS get_user_match_history(TEXT, INTEGER, INTEGER);
 
 CREATE FUNCTION get_user_match_history(
-    p_user_id UUID,
+    p_user_id TEXT,
     p_limit INTEGER DEFAULT 20,
     p_offset INTEGER DEFAULT 0
 )

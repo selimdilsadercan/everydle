@@ -10,9 +10,10 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "generate": "turbo run generate",
+    "generate": "encore gen client everydle-qnxi -e staging --output=./frontend/lib/client.ts",
     "mobile": "cd frontend && bun run mobile",
     "store": "cd frontend && bun run store",
+    "convex": "cd frontend && npx convex dev",
     "ios": "turbo run ios --filter=@everydle/frontend",
     "clean": "turbo run clean"
   },

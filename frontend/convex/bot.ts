@@ -577,6 +577,29 @@ export const botMakeMove = internalMutation({
         return { success: true, result: "lost" };
       }
 
+      // İki oyuncu da bilemediyse berabere bitir
+      if (playerState?.gameState === "lost") {
+        const nextTargetWord = WORDLE_WORDS[Math.floor(Math.random() * WORDLE_WORDS.length)];
+        
+        // Maç skorlarını ve son sonuçları kaydet (Skorlar değişmez)
+        await ctx.db.patch(args.matchId, {
+          lastRoundResults: {
+            winnerId: undefined, // Berabere
+            word: args.targetWord,
+            guesses1: match.odaId1 === args.botOdaId ? newGuesses : (playerState?.guesses || []),
+            guesses2: match.odaId2 === args.botOdaId ? newGuesses : (playerState?.guesses || []),
+          }
+        });
+
+        // 10 saniye sonra yeni round'u başlat
+        await ctx.scheduler.runAfter(10000, internal.game.startNextRound, {
+          matchId: args.matchId,
+          nextWord: nextTargetWord,
+        });
+
+        return { success: true, result: "draw_round" };
+      }
+
       // Oyuncu hala oynuyor, maç devam ediyor
       return { success: true, result: "lost_waiting" };
     }

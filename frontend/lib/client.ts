@@ -1367,6 +1367,7 @@ export namespace trophies {
         losses: number
         rank: number
         "player_type": "user" | "bot"
+        difficulty?: string | null
     }
 
     export type MatchResult = "win" | "lose" | "draw"

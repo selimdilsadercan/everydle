@@ -1,17 +1,17 @@
 -- =====================================================
 -- LOG MATCH RESULT - Maç sonucunu logla
 -- =====================================================
-DROP FUNCTION IF EXISTS log_match_result(TEXT, UUID, TEXT, TEXT, UUID, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, INTEGER, INTEGER, INTEGER, TEXT, TEXT);
+DROP FUNCTION IF EXISTS log_match_result(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INTEGER, INTEGER, INTEGER, INTEGER, INTEGER, INTEGER, TEXT, TEXT);
 
 CREATE FUNCTION log_match_result(
     p_match_id TEXT,
-    p_player1_id UUID,
+    p_player1_id TEXT,
     p_player1_type TEXT,
     p_player1_name TEXT,
-    p_player2_id UUID,
+    p_player2_id TEXT,
     p_player2_type TEXT,
     p_player2_name TEXT,
-    p_winner_id UUID DEFAULT NULL,
+    p_winner_id TEXT DEFAULT NULL,
     p_winner_type TEXT DEFAULT NULL,
     p_player1_attempts INTEGER DEFAULT NULL,
     p_player2_attempts INTEGER DEFAULT NULL,
