@@ -199,17 +199,6 @@ function GamesContent() {
     setCompletedLevelIds(progress.completedLevels);
   }, [selectedDate]);
 
-  // Auth yüklenene kadar skeleton göster
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-900">
-        <Header />
-        <GamesPageSkeleton />
-        <AppBar currentPage="games" />
-      </div>
-    );
-  }
-
   // Go to previous day (if Monday, go to previous week's Sunday)
   const goToPrevDay = () => {
     if (!selectedDate) return;
@@ -357,6 +346,17 @@ function GamesContent() {
     }
     triggerDataRefresh();
   }, [queryClient, backendUserId, selectedDateStr]);
+
+  // Auth yüklenene kadar skeleton göster
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900">
+        <Header />
+        <GamesPageSkeleton />
+        <AppBar currentPage="games" />
+      </div>
+    );
+  }
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="min-h-screen bg-slate-900">
@@ -581,7 +581,7 @@ function GamesContent() {
         </div>
 
         {/* Bottom Padding for AppBar */}
-        <div className="h-14" />
+        <div className="h-18" />
       </main>
 
       {/* Bottom Navigation */}

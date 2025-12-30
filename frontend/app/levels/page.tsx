@@ -364,7 +364,7 @@ export default function Home() {
       />
 
       {/* Bottom Navigation */}
-      <AppBar currentPage="home" />
+      <AppBar currentPage="levels" />
     </PullToRefresh>
   );
 }

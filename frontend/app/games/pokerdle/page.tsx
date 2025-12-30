@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Info, Calendar, Circle, CheckCircle2, Map as MapIcon } from "lucide-react";
+import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Info, Calendar, Circle, CheckCircle2, Map as MapIcon, Bug } from "lucide-react";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
@@ -137,8 +137,29 @@ const Pokerdle = () => {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showHandsModal, setShowHandsModal] = useState(false);
   const [showPreviousGames, setShowPreviousGames] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [selectedGuessIndex, setSelectedGuessIndex] = useState<number | null>(null);
+  
+  // Calculate status for each card based on all previous guesses
+  const cardStatuses = (() => {
+    const statuses: Record<string, CardState> = {};
+    guesses.forEach(guess => {
+      guess.forEach(g => {
+        if (g.state === "correct") {
+          statuses[g.card] = "correct";
+        } else if (g.state === "present") {
+          if (statuses[g.card] !== "correct") {
+            statuses[g.card] = "present";
+          }
+        } else if (g.state === "absent") {
+          if (statuses[g.card] !== "correct" && statuses[g.card] !== "present") {
+            statuses[g.card] = "absent";
+          }
+        }
+      });
+    });
+    return statuses;
+  })();
   
   // Levels modunda tamamlanmamış en son oyunla başla
   const [gameNumber, setGameNumber] = useState(() => {
@@ -242,6 +263,7 @@ const Pokerdle = () => {
       const completionDate = formatDate(gameDate);
       markDailyGameCompleted(backendUserId, "pokerdle", gameNumber, completionDate);
       setDailyCompleted(true);
+      triggerDataRefresh(); // Games listesi cache'ini yenile
     }
   }, [gameState, gameNumber, backendUserId, dailyCompleted]);
 
@@ -251,20 +273,12 @@ const Pokerdle = () => {
     const targetCards = [...targetHand.cards];
     const result: CardGuess[] = guess.map(card => ({ card, state: "absent" as CardState }));
     const usedExact = new Array(5).fill(false);
-    const usedRank = new Array(5).fill(false);
 
-    // Helper: Karttan rank çıkar
-    const getRank = (card: string): string => {
-      if (card.startsWith("10")) return "10";
-      return card[0];
-    };
-
-    // First pass: mark correct positions (exact card match)
+    // First pass: mark correct positions (exact card match at correct position)
     for (let i = 0; i < 5; i++) {
       if (guess[i] === targetCards[i]) {
         result[i].state = "correct";
         usedExact[i] = true;
-        usedRank[i] = true;
       }
     }
 
@@ -278,22 +292,6 @@ const Pokerdle = () => {
         if (index !== -1) {
           result[i].state = "present";
           usedExact[index] = true;
-          usedRank[index] = true;
-        }
-      }
-    }
-
-    // Third pass: mark present if same rank but different suit
-    for (let i = 0; i < 5; i++) {
-      if (result[i].state === "absent") {
-        const card = guess[i];
-        const guessRank = getRank(card);
-        const index = targetCards.findIndex(
-          (c, idx) => getRank(c) === guessRank && !usedRank[idx]
-        );
-        if (index !== -1) {
-          result[i].state = "present";
-          usedRank[index] = true;
         }
       }
     }
@@ -352,17 +350,8 @@ const Pokerdle = () => {
       setSelectedCards(sortCardsByRank(newCards));
       setMessage("");
     } else {
-      // Prevent selection if card was used and marked as "absent" (grey) or "present" (yellow)
-      // Only green (correct) cards can be reused
-      const isUsedAndDisabled = guesses.some((guess) =>
-        guess.some((g) => g.card === card && (g.state === "absent" || g.state === "present"))
-      );
-
-      if (isUsedAndDisabled) {
-        setMessage("Bu kartı zaten kullandınız");
-        setTimeout(() => setMessage(""), 2000);
-        return;
-      }
+      // User requested no cards to be disabled, so we allow re-selecting 
+      // even if they were marked absent or present before.
 
       if (selectedCards.length < 5) {
         const newCards = [...selectedCards, card];
@@ -408,13 +397,15 @@ const Pokerdle = () => {
   };
 
   const resetGame = () => {
-    const randomHand =
-      POKER_HANDS[Math.floor(Math.random() * POKER_HANDS.length)];
-    setTargetHand(randomHand);
+    // Hedef eli değiştirme - sadece tahminleri ve oyun durumunu sıfırla
     setGuesses([]);
     setSelectedCards([]);
     setGameState("playing");
     setMessage("");
+    setDailyCompleted(false);
+    
+    // localStorage'dan bu oyunu temizle
+    localStorage.removeItem(`pokerdle-game-${gameNumber}`);
     
     // Calculate date for this game number to unmark
     const daysDiff = gameNumber - FIRST_GAME_NUMBER;
@@ -434,7 +425,7 @@ const Pokerdle = () => {
       case "correct":
         return "bg-emerald-600";
       case "present":
-        return "bg-orange-500";
+        return "bg-yellow-500";
       case "absent":
         return "bg-slate-600";
       default:
@@ -617,26 +608,18 @@ const Pokerdle = () => {
                       <RotateCcw className="w-5 h-5" />
                       <span>Sıfırla</span>
                     </button>
-                    <button
-                      className="w-full px-4 py-3 text-left hover:bg-slate-700 hover:mx-2 hover:rounded-md transition-all flex items-center gap-3"
-                      onClick={() => {
-                        router.back();
-                        setShowMenu(false);
-                      }}
-                    >
-                      <MapIcon className="w-5 h-5" />
-                      <span>Bölümlere Dön</span>
-                    </button>
-                    <button
-                      className="w-full px-4 py-3 text-left hover:bg-slate-700 hover:mx-2 hover:rounded-md transition-all flex items-center gap-3"
-                      onClick={() => {
-                        setShowDebug(!showDebug);
-                        setShowMenu(false);
-                      }}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center">🐛</span>
-                      <span>Debug</span>
-                    </button>
+                    {typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
+                      <button
+                        className="w-full px-4 py-3 text-left hover:bg-slate-700 hover:mx-2 hover:rounded-md transition-all flex items-center gap-3"
+                        onClick={() => {
+                          setShowAnswerModal(true);
+                          setShowMenu(false);
+                        }}
+                      >
+                        <Bug className="w-5 h-5" />
+                        <span>Cevabı Göster</span>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -652,6 +635,53 @@ const Pokerdle = () => {
             </div>
           )}
         </header>
+
+        {/* Answer Modal (Cevabı Göster) */}
+        {showAnswerModal && targetHand && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/70 z-50"
+              onClick={() => setShowAnswerModal(false)}
+            />
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 rounded-xl border border-slate-600 p-6 max-w-sm w-full mx-4 shadow-2xl">
+              <div className="flex items-center gap-2 mb-4 text-slate-300">
+                <Bug className="w-5 h-5" />
+                <h3 className="text-lg font-bold">Cevabı Göster</h3>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-slate-400 text-sm mb-2">Hedef El: <span className="text-emerald-400 font-semibold">{targetHand.name}</span></p>
+                <div className="flex gap-1 justify-center">
+                  {targetHand.cards.map((cardStr, idx) => {
+                    const suit = cardStr.slice(-1);
+                    const rank = cardStr.slice(0, -1);
+                    const isRed = suit === "♥" || suit === "♦";
+                    return (
+                      <div
+                        key={idx}
+                        className="w-10 h-14 bg-emerald-600 rounded-md flex flex-col items-center justify-center border border-emerald-500"
+                      >
+                        <span className={isRed ? "text-red-400 font-bold text-sm" : "text-white font-bold text-sm"}>
+                          {rank}
+                        </span>
+                        <span className={isRed ? "text-red-400 text-xs" : "text-white text-xs"}>
+                          {suit}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setShowAnswerModal(false)}
+                className="w-full mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Success/Lost State */}
         {(gameState === "won" || gameState === "lost") && (
@@ -701,12 +731,7 @@ const Pokerdle = () => {
               </span>
             </div>
 
-            <button
-              onClick={resetGame}
-              className="px-6 py-2 rounded-md bg-emerald-600 text-sm font-semibold hover:bg-emerald-700 transition-colors cursor-pointer"
-            >
-              Tekrar Oyna
-            </button>
+
 
             {/* Levels modunda 'Bölümlere Devam Et' butonu */}
             {mode === "levels" && gameState === "won" && (
@@ -728,11 +753,13 @@ const Pokerdle = () => {
           </div>
         )}
 
-        {/* 5x5 Grid - Guesses and Current Selection */}
+        {/* 6x5 Grid - Guesses and Current Selection - Scrollable */}
         <div className="mb-6">
-          <div className="flex gap-4 items-start justify-center">
-            {/* Grid */}
-            <div className="space-y-2 mb-4 min-w-[200px]">
+          {/* Scrollable container for grid + feedback - full height when game is finished */}
+          <div className={`${gameState === "playing" ? "max-h-[180px] overflow-y-scroll" : ""} overflow-x-hidden pr-1`}>
+            <div className="flex gap-4 items-start justify-center">
+              {/* Grid */}
+              <div className="space-y-2 min-w-[200px]">
               {/* Previous guesses */}
               {guesses.map((guess, row) => (
                 <div key={row} className="grid grid-cols-5 gap-2">
@@ -748,7 +775,7 @@ const Pokerdle = () => {
                           cardData.state === "correct"
                             ? "border-emerald-400"
                             : cardData.state === "present"
-                            ? "border-orange-400"
+                            ? "border-yellow-400"
                             : "border-slate-500"
                         }`}
                       >
@@ -812,11 +839,11 @@ const Pokerdle = () => {
                 </div>
               )}
 
-              {/* Empty rows to fill 5x5 */}
+              {/* Empty rows to fill 6x5 */}
               {Array.from({
                 length: Math.max(
                   0,
-                  5 - guesses.length - (gameState === "playing" ? 1 : 0)
+                  6 - guesses.length - (gameState === "playing" ? 1 : 0)
                 ),
               }).map((_, row) => (
                 <div
@@ -835,7 +862,7 @@ const Pokerdle = () => {
 
             {/* Feedback messages - outside grid */}
             <div className="space-y-[11px]">
-              {Array.from({ length: 5 }).map((_, row) => {
+              {Array.from({ length: 6 }).map((_, row) => {
                 const guess = guesses[row];
                 if (guess) {
                   const guessCards = guess.map((g) => g.card);
@@ -868,7 +895,7 @@ const Pokerdle = () => {
                       <button
                         key={row}
                         onClick={handleClick}
-                        className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[120px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
+                        className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
                       >
                         <span className="text-slate-300 text-xs font-medium">{handTypeTR}</span>
                         <span className="text-red-500 text-base">
@@ -882,7 +909,7 @@ const Pokerdle = () => {
                       <button
                         key={row}
                         onClick={handleClick}
-                        className="bg-slate-800 border border-emerald-600 rounded px-2 py-2 min-w-[120px] h-[42px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
+                        className="bg-slate-800 border border-emerald-600 rounded px-2 py-2 min-w-[90px] h-[42px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
                       >
                         <span className="text-emerald-400 text-xs font-semibold">{handTypeTR}</span>
                       </button>
@@ -892,7 +919,7 @@ const Pokerdle = () => {
                     <button
                       key={row}
                       onClick={handleClick}
-                      className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[120px] cursor-pointer hover:bg-slate-700 transition-colors"
+                      className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] cursor-pointer hover:bg-slate-700 transition-colors"
                     >
                       <span className="text-slate-500 text-xs">{handTypeTR}</span>
                     </button>
@@ -906,7 +933,7 @@ const Pokerdle = () => {
                       setSelectedGuessIndex(null);
                       setShowHandsModal(true);
                     }}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[120px] h-[42px] opacity-70 cursor-pointer hover:opacity-100 hover:bg-slate-700 transition-all flex items-center justify-center"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] h-[42px] opacity-70 cursor-pointer hover:opacity-100 hover:bg-slate-700 transition-all flex items-center justify-center"
                   >
                     <Info className="w-4 h-4 text-slate-500" />
                   </button>
@@ -915,148 +942,163 @@ const Pokerdle = () => {
             </div>
           </div>
         </div>
+        </div>
 
         {/* Card Selection - Grouped by suit */}
         {gameState === "playing" && (
           <div className="mb-4 space-y-2">
+            {/* All suits - show 2 rows for each: 2-9 and 10-A (except last suit) */}
             {SUITS.map((suit, suitIndex) => {
               const isLastSuit = suitIndex === SUITS.length - 1;
+              const firstRowRanks = RANKS.slice(0, 8); // 2-9
+              const secondRowRanks = RANKS.slice(8);   // 10, J, Q, K, A
               
-              // For last suit (clubs), split into two rows
-              if (isLastSuit) {
-                const firstRowRanks = RANKS.slice(0, 9); // 2-10
-                const secondRowRanks = RANKS.slice(9);   // J, Q, K, A
-                
-                return (
-                  <div key={suit} className="space-y-1">
-                    {/* First row: 2-10 */}
-                    <div className="flex gap-1 flex-wrap justify-center">
-                      {firstRowRanks.map((rank) => {
-                        const card = `${rank}${suit}`;
-                        const isSelected = selectedCards.includes(card);
-                        const wasUsedAsAbsent = guesses.some((guess) =>
-                          guess.some((g) => g.card === card && g.state === "absent")
-                        );
-                        return (
-                          <button
-                            key={card}
-                            onClick={() => toggleCard(rank, suit)}
-                            disabled={
-                              gameState !== "playing" ||
-                              (!isSelected && selectedCards.length >= 5) ||
-                              wasUsedAsAbsent
-                            }
-                            className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${
-                              isSelected
-                                ? "bg-emerald-600 text-slate-100"
-                                : wasUsedAsAbsent
-                                ? "bg-slate-700 text-slate-500 opacity-50"
-                                : "bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700"
-                            } disabled:cursor-not-allowed transition-colors`}
-                          >
-                            <span>{rank}</span>
-                            <span className={`text-sm ${getSuitColor(suit)}`}>
-                              {suit}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Second row: ENTER + J Q K A + DELETE - full width */}
-                    <div className="flex gap-1 justify-center w-full">
-                      <button
-                        onClick={handleGuess}
-                        disabled={selectedCards.length !== 5}
-                        className="flex-1 max-w-[60px] h-12 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Tahmin Et
-                      </button>
+              return (
+                <div key={suit} className="space-y-1">
+                  {/* First row: 2-9 */}
+                  <div className="flex gap-1 flex-wrap justify-center">
+                    {firstRowRanks.map((rank) => {
+                      const card = `${rank}${suit}`;
+                      const isSelected = selectedCards.includes(card);
+                      const status = cardStatuses[card];
                       
+                      let bgColor = "bg-slate-800";
+                      let textColor = "text-slate-100";
+                      let borderColor = "border-slate-700";
+                      
+                      if (status === "correct") bgColor = "bg-emerald-600";
+                      else if (status === "present") bgColor = "bg-yellow-500";
+                      else if (status === "absent") {
+                        bgColor = "bg-[#1D293D] opacity-40";
+                        textColor = "text-slate-400";
+                        borderColor = "border-transparent";
+                      }
+                      
+                      if (isSelected) {
+                        borderColor = "border-white border-2";
+                      }
+
+                      return (
+                        <button
+                          key={card}
+                          onClick={() => toggleCard(rank, suit)}
+                          disabled={gameState !== "playing"}
+                          className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${bgColor} ${textColor} border ${borderColor} transition-colors ${gameState !== "playing" ? "opacity-50 cursor-not-allowed" : "hover:brightness-110"}`}
+                        >
+                          <span>{rank}</span>
+                          <span className={`text-sm ${getSuitColor(suit)} ${status === "absent" ? "opacity-50" : ""}`}>
+                            {suit}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Second row: 10, J, Q, K, A - skip for last suit (will be in bottom row) */}
+                  {!isLastSuit && (
+                    <div className="flex gap-1 flex-wrap justify-center">
                       {secondRowRanks.map((rank) => {
                         const card = `${rank}${suit}`;
                         const isSelected = selectedCards.includes(card);
-                        const wasUsedAsAbsent = guesses.some((guess) =>
-                          guess.some((g) => g.card === card && g.state === "absent")
-                        );
+                        const status = cardStatuses[card];
+                        
+                        let bgColor = "bg-slate-800";
+                        let textColor = "text-slate-100";
+                        let borderColor = "border-slate-700";
+                        
+                        if (status === "correct") bgColor = "bg-emerald-600";
+                        else if (status === "present") bgColor = "bg-yellow-500";
+                        else if (status === "absent") {
+                          bgColor = "bg-[#1D293D] opacity-40";
+                          textColor = "text-slate-400";
+                          borderColor = "border-transparent";
+                        }
+                        
+                        if (isSelected) {
+                          borderColor = "border-white border-2";
+                        }
+
                         return (
                           <button
                             key={card}
                             onClick={() => toggleCard(rank, suit)}
-                            disabled={
-                              gameState !== "playing" ||
-                              (!isSelected && selectedCards.length >= 5) ||
-                              wasUsedAsAbsent
-                            }
-                            className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${
-                              isSelected
-                                ? "bg-emerald-600 text-slate-100"
-                                : wasUsedAsAbsent
-                                ? "bg-slate-700 text-slate-500 opacity-50"
-                                : "bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700"
-                            } disabled:cursor-not-allowed transition-colors`}
+                            disabled={gameState !== "playing"}
+                            className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${bgColor} ${textColor} border ${borderColor} transition-colors ${gameState !== "playing" ? "opacity-50 cursor-not-allowed" : "hover:brightness-110"}`}
                           >
                             <span>{rank}</span>
-                            <span className={`text-sm ${getSuitColor(suit)}`}>
+                            <span className={`text-sm ${getSuitColor(suit)} ${status === "absent" ? "opacity-50" : ""}`}>
                               {suit}
                             </span>
                           </button>
                         );
                       })}
-                      
-                      <button
-                        onClick={() => {
-                          if (selectedCards.length > 0) {
-                            const newCards = selectedCards.slice(0, -1);
-                            setSelectedCards(newCards);
-                          }
-                        }}
-                        disabled={selectedCards.length === 0}
-                        className="flex-1 max-w-[60px] h-12 bg-red-600 text-white rounded-md hover:bg-red-500 transition-colors font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        ⌫
-                      </button>
                     </div>
-                  </div>
-                );
-              }
-              
-              // For other suits, render normally
-              return (
-                <div key={suit} className="flex gap-1 flex-wrap justify-center">
-                  {RANKS.map((rank) => {
-                    const card = `${rank}${suit}`;
-                    const isSelected = selectedCards.includes(card);
-                    const wasUsedAsAbsent = guesses.some((guess) =>
-                      guess.some((g) => g.card === card && g.state === "absent")
-                    );
-                    return (
-                      <button
-                        key={card}
-                        onClick={() => toggleCard(rank, suit)}
-                        disabled={
-                          gameState !== "playing" ||
-                          (!isSelected && selectedCards.length >= 5) ||
-                          wasUsedAsAbsent
-                        }
-                        className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${
-                          isSelected
-                            ? "bg-emerald-600 text-slate-100"
-                            : wasUsedAsAbsent
-                            ? "bg-slate-700 text-slate-500 opacity-50"
-                            : "bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700"
-                        } disabled:cursor-not-allowed transition-colors`}
-                      >
-                        <span>{rank}</span>
-                        <span className={`text-sm ${getSuitColor(suit)}`}>
-                          {suit}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  )}
                 </div>
               );
             })}
+            
+            {/* Bottom row: ENTER + 10 J Q K A (last displayed suit ♣) + DELETE */}
+            <div className="flex gap-1 justify-center w-full">
+              <button
+                onClick={handleGuess}
+                disabled={selectedCards.length !== 5}
+                className="w-11 h-12 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors font-bold text-[10px] disabled:cursor-not-allowed"
+              >
+                ENTER
+              </button>
+              
+              {/* 10, J, Q, K, A for last suit (♣) */}
+              {RANKS.slice(8).map((rank) => {
+                const suit = "♣";
+                const card = `${rank}${suit}`;
+                const isSelected = selectedCards.includes(card);
+                const status = cardStatuses[card];
+                
+                let bgColor = "bg-slate-800";
+                let textColor = "text-slate-100";
+                let borderColor = "border-slate-700";
+                
+                if (status === "correct") bgColor = "bg-emerald-600";
+                else if (status === "present") bgColor = "bg-yellow-500";
+                else if (status === "absent") {
+                  bgColor = "bg-[#1D293D] opacity-40";
+                  textColor = "text-slate-400";
+                  borderColor = "border-transparent";
+                }
+                
+                if (isSelected) {
+                  borderColor = "border-white border-2";
+                }
+
+                return (
+                  <button
+                    key={card}
+                    onClick={() => toggleCard(rank, suit)}
+                    disabled={gameState !== "playing"}
+                    className={`w-9 h-12 rounded-md text-xs font-semibold flex flex-col items-center justify-center ${bgColor} ${textColor} border ${borderColor} transition-colors ${gameState !== "playing" ? "opacity-50 cursor-not-allowed" : "hover:brightness-110"}`}
+                  >
+                    <span>{rank}</span>
+                    <span className={`text-sm ${getSuitColor(suit)} ${status === "absent" ? "opacity-50" : ""}`}>
+                      {suit}
+                    </span>
+                  </button>
+                );
+              })}
+              
+              <button
+                onClick={() => {
+                  if (selectedCards.length > 0) {
+                    const newCards = selectedCards.slice(0, -1);
+                    setSelectedCards(newCards);
+                  }
+                }}
+                disabled={selectedCards.length === 0}
+                className="w-11 h-12 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors font-bold text-sm  disabled:cursor-not-allowed"
+              >
+                ⌫
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1145,7 +1187,7 @@ const Pokerdle = () => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="sticky top-0 bg-slate-800 flex items-center justify-between p-4 border-b border-slate-700">
+            <div className="sticky top-0 bg-slate-800 flex items-center justify-between p-4 border-b border-slate-700 z-10">
               <h2 className="text-xl font-bold">Poker Elleri</h2>
               <button
                 onClick={() => setShowHandsModal(false)}
@@ -1371,37 +1413,6 @@ const Pokerdle = () => {
                 return <div className="space-y-2">{games}</div>;
               })()}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Debug Popup */}
-      {showDebug && targetHand && (
-        <div className="fixed bottom-4 right-4 bg-slate-800 border border-slate-700 rounded-lg p-4 z-50 shadow-xl">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs text-slate-400">Oyun #{gameNumber} - Hedef El:</div>
-            <button onClick={() => setShowDebug(false)} className="text-slate-400 hover:text-white text-sm">✕</button>
-          </div>
-          <div className="text-sm font-semibold text-emerald-400 mb-2">{targetHand.name}</div>
-          <div className="flex gap-1">
-            {targetHand.cards.map((cardStr, idx) => {
-              const suit = cardStr.slice(-1);
-              const rank = cardStr.slice(0, -1);
-              const isRed = suit === "♥" || suit === "♦";
-              return (
-                <div
-                  key={idx}
-                  className="w-8 h-10 bg-slate-700 rounded flex flex-col items-center justify-center text-xs border border-slate-600"
-                >
-                  <span className={isRed ? "text-red-500 font-bold" : "text-white font-bold"}>
-                    {rank}
-                  </span>
-                  <span className={isRed ? "text-red-500 text-[10px]" : "text-white text-[10px]"}>
-                    {suit}
-                  </span>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}

@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Map, Gamepad2, User, Swords, Store } from "lucide-react";
+import { Map, Gamepad2, User, Swords, Store, Home } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserByFirebaseId, useCanClaimReward, useCompletedGamesForToday, useDailyProgressListener } from "@/hooks/useProfileData";
 
 // Page enum for active state
-export type PageType = "store" | "games" | "home" | "challenge" | "profile";
+export type PageType = "store" | "games" | "levels" | "challenge" | "profile";
 
 // Total number of daily games
 const TOTAL_DAILY_GAMES = 8;
@@ -21,10 +21,16 @@ const navigationItems = [
     hasBadge: true, // This item can have a badge
   },
   {
+    href: "/levels",
+    page: "levels" as PageType,
+    label: "Bölümler",
+    icon: Map,
+  },
+  {
     href: "/games",
     page: "games" as PageType,
-    label: "Kütüphane",
-    icon: Gamepad2,
+    label: "Ana Sayfa",
+    icon: Home,
     showProgress: true, // Show daily progress
   },
   {
@@ -32,12 +38,6 @@ const navigationItems = [
     page: "challenge" as PageType,
     label: "Meydan Oku",
     icon: Swords,
-  },
-  {
-    href: "/levels",
-    page: "home" as PageType,
-    label: "Bölümler",
-    icon: Map,
   },
   {
     href: "/profile",
