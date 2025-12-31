@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, Volume2, VolumeX, Gift } from "lucide-react";
+import { AdMob, RewardAdPluginEvents } from '@capacitor-community/admob';
+import { Capacitor } from '@capacitor/core';
 
 interface VideoAdModalProps {
   isOpen: boolean;
@@ -13,18 +15,58 @@ export default function VideoAdModal({ isOpen, onClose, onComplete }: VideoAdMod
   const [countdown, setCountdown] = useState(15);
   const [isMuted, setIsMuted] = useState(true);
   const [canClose, setCanClose] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isApp = Capacitor.isNativePlatform();
 
-  // Sample high-quality game-like videos or ads
+  // AdMob Reward IDs for each platform
+  const ADMOB_REWARD_ID = Capacitor.getPlatform() === 'ios' 
+    ? "ca-app-pub-8702057253982242/1940057534" 
+    : "ca-app-pub-8702057253982242/5879302547";
   const adVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-digital-animation-of-a-gamer-playing-an-arcade-game-34551-large.mp4";
 
   useEffect(() => {
     if (isOpen) {
+      if (isApp) {
+        // Try AdMob
+        const showAdMob = async () => {
+          try {
+            await AdMob.initialize();
+            await AdMob.prepareRewardVideoAd({ adId: ADMOB_REWARD_ID });
+            
+            // Listen for reward event
+            const rewardListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, (reward: any) => {
+              console.log("REWARD EARNED:", reward);
+              onComplete();
+              onClose();
+            });
+
+            // Listen for dismiss event
+            const dismissListener = await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
+              onClose();
+            });
+            
+            await AdMob.showRewardVideoAd();
+          } catch (error) {
+            console.error("AdMob Error:", error);
+            setUseFallback(true); // Switch to our custom video modal if AdMob fails or on web
+          }
+        };
+        showAdMob();
+      } else {
+        // Web version - just use simulation
+        setUseFallback(true);
+      }
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && useFallback) {
       setCountdown(15);
       setCanClose(false);
       
       const timer = setInterval(() => {
-        setCountdown((prev) => {
+        setCountdown((prev: number) => {
           if (prev <= 1) {
             clearInterval(timer);
             setCanClose(true);
@@ -42,9 +84,11 @@ export default function VideoAdModal({ isOpen, onClose, onComplete }: VideoAdMod
 
       return () => clearInterval(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, useFallback]);
 
   if (!isOpen) return null;
+  // If we are on app and NOT using fallback, AdMob will show its own native UI
+  if (!useFallback && isApp) return null;
 
   const handleManualClose = () => {
     if (canClose) {

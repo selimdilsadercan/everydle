@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Crown, Gift, ArrowBigRight, Diamond, Check, Lock } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Crown, Gift, ArrowBigRight, Diamond, Check, Lock, Smartphone } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import AppBar from "@/components/AppBar";
 import Header, { triggerDataRefresh } from "@/components/Header";
@@ -47,6 +48,8 @@ export default function StorePage() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const videoRewardClaimPending = useRef(false);
 
+  const isApp = Capacitor.isNativePlatform();
+
   // Loading state
   const dataLoading = !!user?.uid && (isUserLoading || isStatsLoading || isRewardLoading);
 
@@ -86,6 +89,10 @@ export default function StorePage() {
     if (!canClaim || !backendUserId) return;
 
     if (requiresVideo) {
+      if (!isApp) {
+        // We could show a toast or message here, but button is already disabled in UI
+        return;
+      }
       setShowVideoModal(true);
       return; // Wait for onComplete from modal
     }
@@ -281,9 +288,9 @@ export default function StorePage() {
               
               <button
                 onClick={handleClaimReward}
-                disabled={!canClaim || isVideoPlaying || showRewardModal}
+                disabled={!canClaim || isVideoPlaying || showRewardModal || (requiresVideo && !isApp)}
                 className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                  canClaim && !isVideoPlaying && !showRewardModal
+                  canClaim && !isVideoPlaying && !showRewardModal && !(requiresVideo && !isApp)
                     ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
                     : "bg-slate-700 text-slate-500 cursor-not-allowed"
                 }`}
@@ -295,8 +302,12 @@ export default function StorePage() {
                   </>
                 ) : (
                   <>
-                    {requiresVideo && <Gift className="w-5 h-5" />}
-                    {canClaim ? (requiresVideo ? "Video İzle ve Al" : "Ücretsiz Al") : "Bugünlük Bitti ✓"}
+                    {requiresVideo && (isApp ? <Gift className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />)}
+                    {canClaim 
+                      ? (requiresVideo 
+                          ? (isApp ? "Video İzle ve Al" : "Sadece Uygulamada") 
+                          : "Ücretsiz Al") 
+                      : "Bugünlük Bitti ✓"}
                   </>
                 )}
               </button>

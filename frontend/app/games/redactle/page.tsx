@@ -16,12 +16,19 @@ import {
   CheckCircle2,
   Circle,
   Play,
+  Diamond,
+  ArrowBigRight,
+  Lightbulb as LightBulbIcon,
+  Plus,
+  Bug,
 } from "lucide-react";
+import React, { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { markGameCompleted, unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { markDailyGameCompleted } from "@/app/games/actions";
+import { getUserStars } from "@/lib/userStars";
 
 // Turkish common words (stop words)
 const TURKISH_COMMON_WORDS = [
@@ -139,6 +146,37 @@ const getFilePath = (date: Date): string => {
   return `/redactle/${dayStr}-${dateStr}.md`;
 };
 
+// Separate Input component to prevent top-level re-renders on every keystroke
+const GuessInput = ({ 
+  onGuess, 
+  disabled 
+}: { 
+  onGuess: (guess: string) => void, 
+  disabled: boolean 
+}) => {
+  const [localGuess, setLocalGuess] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!localGuess.trim() || disabled) return;
+    onGuess(localGuess);
+    setLocalGuess("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="text"
+        className="w-full box-border rounded-md bg-slate-700 border border-slate-600 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 placeholder:text-slate-500 transition-all text-white"
+        placeholder="Bir kelime yaz..."
+        value={localGuess}
+        onChange={(e) => setLocalGuess(e.target.value)}
+        disabled={disabled}
+      />
+    </form>
+  );
+};
+
 const Redactle = () => {
   const router = useRouter();
   const { backendUserId } = useAuth();
@@ -150,8 +188,8 @@ const Redactle = () => {
     solved: boolean;
     guessDisplayNames?: Record<string, string>; // Maps normalized -> original display name
     guessOrder?: string[]; // Array tracking guess order (newest first)
+    hintedWords?: Record<string, boolean>; // Tracks which words were revealed via hint
   } | null>(null);
-  const [currentGuess, setCurrentGuess] = useState("");
   const [loading, setLoading] = useState(true);
   const [wordCount, setWordCount] = useState<Record<string, number>>({});
   const [tokenLookup, setTokenLookup] = useState<Record<string, Token[]>>({});
@@ -165,6 +203,7 @@ const Redactle = () => {
       guesses: Record<string, number>;
       revealed?: Record<string, boolean>;
       guessDisplayNames?: Record<string, string>;
+      hintedWords?: Record<string, boolean>;
     }>
   >([]);
   // Keys revealed by the last guess (used for blue highlighting)
@@ -196,6 +235,154 @@ const Redactle = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   // Store the actual article title from markdown file
   const [articleTitle, setArticleTitle] = useState<string>("");
+
+  // Joker ve coin state'leri
+  const [hints, setHints] = useState(0);
+  const [skips, setSkips] = useState(0);
+  const [coins, setCoins] = useState(0);
+  const [isHintMode, setIsHintMode] = useState(false);
+
+  // Memoized article rendering to prevent lag on every keystroke
+  const renderedArticle = useMemo(() => {
+    return sections.map((section, sectionIdx) => {
+      // Check if this is a list item (starts with bullet point)
+      const isListItem =
+        section.tokens.length > 0 && section.tokens[0].value === "• ";
+      return (
+        <div
+          key={sectionIdx}
+          className={
+            section.headline ? "mt-10 mb-4" : isListItem ? "mb-1" : "mb-4"
+          }
+        >
+          {section.headline ? (
+            <h2 className="text-2xl font-bold text-slate-100 mb-2 leading-10">
+              {section.tokens.map((token, tokenIdx) => {
+                // If token has no wordNormal, it's a space/punctuation - render directly
+                if (!token.wordNormal) {
+                  return <span key={tokenIdx}>{token.value}</span>;
+                }
+                return (
+                  <span key={tokenIdx} className="relative inline-block">
+                    <span
+                      id={token.id}
+                      className={`${
+                        token.highlight ? "bg-emerald-700 text-white" : ""
+                      } ${
+                        token.redacted
+                          ? "bg-slate-700 text-slate-700 select-none mb-2 align-top rounded-[4px]"
+                          : "text-slate-100"
+                      } ${bouncingTokenId === token.id ? "word-bounce" : ""} ${
+                        isHintMode &&
+                        token.redacted &&
+                        !isTitleWord(token.wordNormal || "")
+                          ? "hint-highlight"
+                          : ""
+                      }`}
+                      style={{
+                        cursor: token.redacted ? "pointer" : "default",
+                      }}
+                      onClick={() => {
+                        if (isHintMode) {
+                          if (token.redacted && token.wordNormal) {
+                            revealWord(token.wordNormal);
+                            setIsHintMode(false);
+                          }
+                        } else if (token.redacted && token.id) {
+                          setClickedTokenId(token.id);
+                          setTimeout(() => setClickedTokenId(null), 2000);
+                        }
+                      }}
+                    >
+                      {token.redacted
+                        ? "█".repeat(Math.max(token.value.length, 3))
+                        : token.value}
+                    </span>
+                    {clickedTokenId === token.id && token.redacted && (
+                      <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-50">
+                        {token.value.length} harf
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </h2>
+          ) : (
+            <p className={isListItem ? "mb-0" : "mb-4"}>
+              {section.tokens.map((token, tokenIdx) => {
+                // If token has no wordNormal, it's a space/punctuation - render directly
+                if (!token.wordNormal) {
+                  return <span key={tokenIdx}>{token.value}</span>;
+                }
+                return (
+                  <span key={tokenIdx} className="relative inline-block">
+                    <span
+                      id={token.id}
+                      className={`${
+                        token.highlight ? "bg-emerald-700 text-white" : ""
+                      } ${
+                        token.redacted
+                          ? "bg-slate-700 text-slate-700 select-none mb-2 align-top rounded-[4px]"
+                          : "text-slate-200"
+                      } ${bouncingTokenId === token.id ? "word-bounce" : ""} ${
+                        isHintMode &&
+                        token.redacted &&
+                        !isTitleWord(token.wordNormal || "")
+                          ? "hint-highlight"
+                          : ""
+                      }`}
+                      style={{
+                        cursor: token.redacted ? "pointer" : "default",
+                      }}
+                      onClick={() => {
+                        if (isHintMode) {
+                          if (token.redacted && token.wordNormal) {
+                            revealWord(token.wordNormal);
+                            setIsHintMode(false);
+                          }
+                        } else if (token.redacted && token.id) {
+                          setClickedTokenId(token.id);
+                          setTimeout(() => setClickedTokenId(null), 2000);
+                        }
+                      }}
+                    >
+                      {token.redacted
+                        ? "█".repeat(Math.max(token.value.length, 3))
+                        : token.value}
+                    </span>
+                    {clickedTokenId === token.id && token.redacted && (
+                      <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-50">
+                        {token.value.length} harf
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </p>
+          )}
+        </div>
+      );
+    });
+  }, [sections, bouncingTokenId, clickedTokenId, isHintMode]);
+
+  // Joker ve coin değerlerini yükle
+  useEffect(() => {
+    const savedHints = localStorage.getItem("everydle-hints");
+    const savedSkips = localStorage.getItem("everydle-giveups");
+    if (savedHints) setHints(parseInt(savedHints));
+    if (savedSkips) setSkips(parseInt(savedSkips));
+    setCoins(getUserStars());
+    
+    const handleStorageChange = () => {
+      const h = localStorage.getItem("everydle-hints");
+      const s = localStorage.getItem("everydle-giveups");
+      if (h) setHints(parseInt(h));
+      if (s) setSkips(parseInt(s));
+      setCoins(getUserStars());
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   // Normalize Turkish text (lowercase, remove accents)
   const normalize = (str: string): string => {
@@ -671,13 +858,13 @@ const Redactle = () => {
         solved: false,
         guessDisplayNames: {},
         guessOrder: [],
+        hintedWords: {},
       };
       setGameState(newState);
       localStorage.setItem(storageKey, JSON.stringify(newState));
     };
 
     // Reset all states when date changes
-    setCurrentGuess("");
     setSelectedWord("");
     setMessage("");
     setSections([]);
@@ -709,23 +896,23 @@ const Redactle = () => {
   }, [gameState, selectedDate]);
 
   // Handle guess submission
-  const handleGuess = () => {
-    if (!currentGuess.trim() || !gameState) return;
+  const handleGuess = (guessToUse?: string) => {
+    const guessValue = guessToUse;
+    if (!guessValue || !guessValue.trim() || !gameState) return;
 
     // Check for spaces - only single words allowed
-    if (currentGuess.trim().includes(" ")) {
+    if (guessValue.trim().includes(" ")) {
       setMessage("Sadece tek kelime girebilirsiniz!");
       setTimeout(() => setMessage(""), 2000);
       return;
     }
 
-    const guessNormalized = normalize(currentGuess.trim());
+    const guessNormalized = normalize(guessValue.trim());
 
     // Validate guess
     if (commonWordsDict[guessNormalized]) {
       setMessage("Bu kelime çok yaygın, tahmin edilemez!");
       setTimeout(() => setMessage(""), 2000);
-      setCurrentGuess("");
       return;
     }
 
@@ -736,7 +923,6 @@ const Redactle = () => {
     ) {
       setMessage("Geçersiz kelime!");
       setTimeout(() => setMessage(""), 2000);
-      setCurrentGuess("");
       return;
     }
 
@@ -747,6 +933,7 @@ const Redactle = () => {
         guesses: { ...(gameState?.guesses || {}) },
         revealed: { ...((gameState as any)?.revealed || {}) },
         guessDisplayNames: { ...(gameState?.guessDisplayNames || {}) },
+        hintedWords: { ...(gameState?.hintedWords || {}) },
       },
     ]);
 
@@ -758,7 +945,6 @@ const Redactle = () => {
     if (already) {
       setMessage("Bu kelimeyi zaten tahmin ettiniz!");
       setTimeout(() => setMessage(""), 2000);
-      setCurrentGuess("");
       return;
     }
 
@@ -791,7 +977,7 @@ const Redactle = () => {
     // always record the exact user guess in guesses map, with the summed count
     updatedGuesses[guessNormalized] = totalCount;
     // Store original display name (with Turkish characters preserved)
-    const originalGuess = currentGuess.trim();
+    const originalGuess = guessValue.trim();
     const updatedDisplayNames = {
       ...(gameState.guessDisplayNames || {}),
       [guessNormalized]: originalGuess,
@@ -862,7 +1048,7 @@ const Redactle = () => {
         sections,
         wordCount,
         tokenLookup,
-        false,
+        true,
         updatedState.guesses,
         updatedState.revealed,
         true,
@@ -873,14 +1059,182 @@ const Redactle = () => {
         sections,
         wordCount,
         tokenLookup,
-        undefined,
+        debugRevealAll,
         updatedState.guesses,
         updatedState.revealed,
         updatedState.solved,
         guessNormalized
       );
     }
-    setCurrentGuess("");
+  };
+
+  // Check if a word is part of the title (main answer)
+  const isTitleWord = (wordNormal: string) => {
+    if (!sections.length || !sections[0].headline) return false;
+
+    // Get all variants of the word to check
+    const variants = new Set([wordNormal]);
+    if (rootToLemmas[wordNormal])
+      rootToLemmas[wordNormal].forEach((v) => variants.add(v));
+    if (lemmaToRoot[wordNormal]) {
+      const root = lemmaToRoot[wordNormal];
+      variants.add(root);
+      if (rootToLemmas[root])
+        rootToLemmas[root].forEach((v) => variants.add(v));
+    }
+
+    // Check if any title token matches these variants
+    return sections[0].tokens.some(
+      (t) => t.wordNormal && variants.has(t.wordNormal)
+    );
+  };
+
+  // Kelimeyi açma fonksiyonu (İpucu için)
+  const revealWord = (wordNormal: string) => {
+    if (!gameState || gameState.solved) return;
+
+    // Başlık kelimelerini ipucuyla açma
+    if (isTitleWord(wordNormal)) {
+      setMessage("Başlık kelimeleri ipucu ile açılamaz!");
+      setTimeout(() => setMessage(""), 2000);
+      return;
+    }
+
+    // Kelimeyi ve tüm varyantlarını aç
+    const matches = getMatchingVariants(wordNormal);
+    const updatedRevealed = { ...(gameState.revealed || {}) };
+    matches.forEach((m) => (updatedRevealed[m] = true));
+    // compute total occurrences (sum of all variants)
+    let totalCount = 0;
+    if (matches.length > 0) {
+      totalCount = matches.reduce((s, m) => s + (wordCount[m] || 0), 0);
+    } else {
+      totalCount = wordCount[wordNormal] || 0;
+    }
+
+    // Update guesses and display names to ensure persistence and sidebar visibility
+    const updatedGuesses = {
+      ...(gameState.guesses || {}),
+      [wordNormal]: totalCount,
+    };
+    const updatedDisplayNames = {
+      ...(gameState.guessDisplayNames || {}),
+      [wordNormal]: wordNormal,
+    };
+    const updatedHintedWords = {
+      ...(gameState.hintedWords || {}),
+      [wordNormal]: true,
+    };
+
+    // Update guess order
+    const existingOrder = gameState.guessOrder || [];
+    const newGuessOrder = existingOrder.includes(wordNormal)
+      ? existingOrder
+      : [wordNormal, ...existingOrder];
+
+    const updatedState = {
+      ...gameState,
+      guesses: updatedGuesses,
+      revealed: updatedRevealed,
+      guessDisplayNames: updatedDisplayNames,
+      guessOrder: newGuessOrder,
+      hintedWords: updatedHintedWords,
+    };
+
+    // Başlık açıldı mı kontrol et
+    if (sections.length > 0 && sections[0].headline) {
+      const titleTokens = sections[0].tokens.filter((t) => t.wordNormal);
+      const allTitleWordsRevealed = titleTokens.every(
+        (token) => !token.wordNormal || updatedRevealed[token.wordNormal] === true
+      );
+      if (allTitleWordsRevealed && titleTokens.length > 0) {
+        updatedState.solved = true;
+        // Tüm kelimeleri aç
+        Object.keys(wordCount).forEach((word) => {
+          updatedRevealed[word] = true;
+        });
+        updatedState.revealed = updatedRevealed;
+        setMessage("Tebrikler! Makaleyi çözdünüz!");
+
+        const gameDay = getDayNumber(selectedDate);
+        const completionDate = formatDate(selectedDate);
+        if (backendUserId) {
+          markDailyGameCompleted(
+            backendUserId,
+            "redactle",
+            gameDay,
+            completionDate
+          );
+        }
+      }
+    }
+
+    setGameState(updatedState);
+    renderTokens(
+      sections,
+      wordCount,
+      tokenLookup,
+      debugRevealAll,
+      updatedState.guesses,
+      updatedRevealed,
+      updatedState.solved,
+      wordNormal
+    );
+
+    // Hint sayısını azalt
+    const newHintCount = hints - 1;
+    localStorage.setItem("everydle-hints", newHintCount.toString());
+    setHints(newHintCount);
+    triggerDataRefresh();
+  };
+
+  // İpucu kullanma fonksiyonu
+  const handleUseHint = () => {
+    if (hints <= 0 || !gameState || gameState.solved) return;
+    setIsHintMode(true);
+  };
+
+  // Atla (Solve) kullanma fonksiyonu
+  const handleUseSkip = () => {
+    if (skips <= 0 || !gameState || gameState.solved) return;
+    
+    const updatedRevealed = { ...(gameState.revealed || {}) };
+    Object.keys(wordCount).forEach(word => updatedRevealed[word] = true);
+    
+    const updatedState = {
+      ...gameState,
+      revealed: updatedRevealed,
+      solved: true
+    };
+    
+    setGameState(updatedState);
+    renderTokens(
+      sections,
+      wordCount,
+      tokenLookup,
+      true,
+      updatedState.guesses,
+      updatedRevealed,
+      true
+    );
+    setMessage("Tebrikler! Makaleyi çözdünüz!");
+    
+    // Skip sayısını azalt
+    const newSkipCount = skips - 1;
+    localStorage.setItem("everydle-giveups", newSkipCount.toString());
+    setSkips(newSkipCount);
+    triggerDataRefresh();
+    
+    // Backend tamamlama
+    const gameDay = getDayNumber(selectedDate);
+    const completionDate = formatDate(selectedDate);
+    if (backendUserId) {
+      markDailyGameCompleted(backendUserId, "redactle", gameDay, completionDate).then(() => {
+        window.dispatchEvent(new CustomEvent("dailyProgressUpdate", { 
+          detail: { gameId: "redactle", gameNumber: gameDay } 
+        }));
+      });
+    }
   };
 
   // Undo the last guess action (restore previous guesses snapshot)
@@ -893,11 +1247,13 @@ const Redactle = () => {
       const restoredGuesses = (last && last.guesses) || {};
       const restoredRevealed = (last && last.revealed) || {};
       const restoredDisplayNames = (last && last.guessDisplayNames) || {};
+      const restoredHintedWords = (last && last.hintedWords) || {};
       const updatedState = {
         ...gameState,
         guesses: restoredGuesses,
         revealed: restoredRevealed,
         guessDisplayNames: restoredDisplayNames,
+        hintedWords: restoredHintedWords,
       };
       setGameState(updatedState);
       // Re-render tokens with restored guesses and revealed
@@ -927,9 +1283,10 @@ const Redactle = () => {
         guesses: { ...(gameState.guesses || {}) },
         revealed: { ...((gameState as any).revealed || {}) },
         guessDisplayNames: { ...(gameState.guessDisplayNames || {}) },
+        hintedWords: { ...(gameState.hintedWords || {}) },
       },
     ]);
-    const updatedState = { ...gameState, guesses: {}, guessDisplayNames: {} };
+    const updatedState = { ...gameState, guesses: {}, guessDisplayNames: {}, hintedWords: {} };
     setGameState(updatedState);
     renderTokens(
       sections,
@@ -962,80 +1319,6 @@ const Redactle = () => {
     }
     // Clear bouncing state
     setBouncingTokenId(null);
-
-    // If clicking on the same word that's already selected, scroll to next occurrence
-    // Don't change highlights - they should only change when a different word is selected
-    if (selectedWord === wordNormal) {
-      // Collect tokens for scrolling
-      const wordVariants = new Set<string>();
-      wordVariants.add(wordNormal);
-      if (rootToLemmas[wordNormal]) {
-        rootToLemmas[wordNormal].forEach((lemma) => {
-          wordVariants.add(lemma);
-        });
-      }
-      if (lemmaToRoot[wordNormal]) {
-        const root = lemmaToRoot[wordNormal];
-        wordVariants.add(root);
-        if (rootToLemmas[root]) {
-          rootToLemmas[root].forEach((lemma) => {
-            wordVariants.add(lemma);
-          });
-        }
-      }
-
-      const tokensInOrder: Token[] = [];
-      const tokenIdSet = new Set<string>();
-      for (const section of sections) {
-        for (const token of section.tokens) {
-          if (token.wordNormal && wordVariants.has(token.wordNormal)) {
-            if (!shouldRedact(token.wordNormal)) {
-              if (!tokenIdSet.has(token.id)) {
-                tokensInOrder.push(token);
-                tokenIdSet.add(token.id);
-              }
-            }
-          }
-        }
-      }
-
-      if (tokensInOrder.length > 0) {
-        const prevIdx = lastScrollIndex[wordNormal];
-        const idx =
-          prevIdx === undefined
-            ? tokensInOrder.length > 1
-              ? 1
-              : 0
-            : (prevIdx + 1) % tokensInOrder.length;
-        const tokenId = tokensInOrder[idx].id;
-        setLastScrollIndex((s) => ({
-          ...s,
-          [wordNormal]: idx,
-        }));
-
-        requestAnimationFrame(() => {
-          scrollTimeoutRef.current = setTimeout(() => {
-            const el = tokenId ? document.getElementById(tokenId) : null;
-            if (el) {
-              // Set bouncing state for this token
-              setBouncingTokenId(tokenId);
-
-              el.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-                inline: "nearest",
-              });
-
-              // Clear bounce animation after it completes (600ms)
-              setTimeout(() => {
-                setBouncingTokenId((prev) => (prev === tokenId ? null : prev));
-              }, 600);
-            }
-          }, 50);
-        });
-      }
-      return;
-    }
 
     // Collect all word variants (the word itself and all its lemmas)
     const wordVariants = new Set<string>();
@@ -1093,52 +1376,8 @@ const Redactle = () => {
       }
     }
 
-    if (tokensInOrder.length === 0) {
-      // still re-render to highlight selection
-      setSelectedWord(wordNormal);
-      renderTokens(
-        sections,
-        wordCount,
-        tokenLookup,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        wordNormal
-      );
-      // If word has 0 occurrences, scroll to top
-      scrollTimeoutRef.current = setTimeout(() => {
-        if (articleRef.current) {
-          articleRef.current.scrollTo({
-            top: 0,
-            behavior: "smooth",
-          });
-        }
-        // Don't auto-clear highlights - keep them visible until user clicks again
-      }, 50);
-      return;
-    }
-
-    // pick next index for this word (start from second occurrence on first click, cycle through)
-    const prevIdx = lastScrollIndex[wordNormal];
-    // If first click (prevIdx is undefined), start at index 1 (second occurrence) if available
-    // Otherwise, go to next occurrence
-    let idx: number;
-    if (prevIdx === undefined) {
-      // First click: go to second occurrence (index 1) if available, otherwise index 0
-      idx = tokensInOrder.length > 1 ? 1 : 0;
-    } else {
-      idx = (prevIdx + 1) % tokensInOrder.length;
-    }
-    const tokenId = tokensInOrder[idx].id;
-    // update index for next click
-    setLastScrollIndex((s) => ({
-      ...s,
-      [wordNormal]: idx,
-    }));
-
-    // Render with highlights FIRST using override parameter (before state update)
-    // This ensures highlights are visible immediately without waiting for state update
+    // 1. Highlight the selection in the text immediately
+    setSelectedWord(wordNormal);
     renderTokens(
       sections,
       wordCount,
@@ -1150,54 +1389,60 @@ const Redactle = () => {
       wordNormal
     );
 
-    // Then update state (this won't cause highlight loss since we use override)
-    setSelectedWord(wordNormal);
+    // 2. Handle scrolling
+    if (tokensInOrder.length === 0) {
+      // If word has 0 occurrences, scroll to top
+      scrollTimeoutRef.current = setTimeout(() => {
+        if (articleRef.current) {
+          articleRef.current.scrollTo({
+            top: 0,
+            behavior: "smooth",
+          });
+        }
+      }, 50);
+      return;
+    }
 
-    // Scroll through all revealed tokens sequentially with bounce animation
-    // Start from the first token and scroll through all of them one by one
-    if (tokensInOrder.length > 0) {
-      const scrollToNext = (index: number) => {
-        if (index >= tokensInOrder.length) return;
+    // Calculate which index to scroll to
+    const prevIdx = lastScrollIndex[wordNormal];
+    let idx: number;
 
-        const token = tokensInOrder[index];
-        const el = token.id ? document.getElementById(token.id) : null;
+    // If it's a new word selection, always start at the first occurrence (index 0)
+    if (selectedWord !== wordNormal) {
+      idx = 0;
+    } else {
+      // If clicking the same word, cycle to the next occurrence
+      idx = (prevIdx === undefined) ? 0 : (prevIdx + 1) % tokensInOrder.length;
+    }
 
+    const tokenId = tokensInOrder[idx].id;
+    // update index for next click
+    setLastScrollIndex((s) => ({
+      ...s,
+      [wordNormal]: idx,
+    }));
+
+    // Perform the scroll
+    requestAnimationFrame(() => {
+      scrollTimeoutRef.current = setTimeout(() => {
+        const el = tokenId ? document.getElementById(tokenId) : null;
         if (el) {
           // Set bouncing state for this token
-          setBouncingTokenId(token.id);
+          setBouncingTokenId(tokenId);
 
-          // Scroll to the element
           el.scrollIntoView({
             behavior: "smooth",
             block: "center",
             inline: "nearest",
           });
 
-          // Wait for scroll to complete (smooth scroll takes ~500-1000ms) then move to next
-          const timeout = setTimeout(() => {
-            // Clear bounce animation after it completes
-            setBouncingTokenId((prev) => (prev === token.id ? null : prev));
-
-            // Scroll to next token after a short delay
-            setTimeout(() => {
-              scrollToNext(index + 1);
-            }, 200);
+          // Clear bounce animation after it completes (600ms)
+          setTimeout(() => {
+            setBouncingTokenId((prev) => (prev === tokenId ? null : prev));
           }, 600);
-
-          scrollTimeoutsRef.current.push(timeout);
-        } else {
-          // If element not found, try next one
-          scrollToNext(index + 1);
         }
-      };
-
-      // Start scrolling from the first token
-      requestAnimationFrame(() => {
-        scrollTimeoutRef.current = setTimeout(() => {
-          scrollToNext(0);
-        }, 50);
-      });
-    }
+      }, 50);
+    });
   };
 
   // Get accuracy percentage
@@ -1212,7 +1457,6 @@ const Redactle = () => {
 
   const resetGame = () => {
     // Clear all state
-    setCurrentGuess("");
     setSelectedWord("");
     setMessage("");
     setSections([]);
@@ -1432,7 +1676,7 @@ const Redactle = () => {
       <div className="pt-18 pb-32 md:pb-0 md:pr-80">
         {/* Success State - Contexto style */}
         {gameState?.solved && (
-          <div className="mt-8 mb-10 mx-8 bg-slate-800 rounded-lg p-6 text-center border-2 border-emerald-600">
+          <div className="mt-14 mb-10 mx-8 bg-slate-800 rounded-lg p-6 text-center border-2 border-emerald-600">
             <h2 className="text-2xl font-bold mb-3 text-emerald-500">
               Tebrikler!
             </h2>
@@ -1534,171 +1778,24 @@ const Redactle = () => {
                 ref={(el) => {
                   articleRef.current = el ?? null;
                 }}
-                className="text-slate-200 text-lg leading-loose px-8 pb-6"
+                className="text-slate-200 text-lg leading-loose px-4 md:px-8 pb-6"
               >
-                {sections.map((section, sectionIdx) => {
-                  // Check if this is a list item (starts with bullet point)
-                  const isListItem =
-                    section.tokens.length > 0 &&
-                    section.tokens[0].value === "• ";
-                  return (
-                    <div
-                      key={sectionIdx}
-                      className={
-                        section.headline
-                          ? "mt-10 mb-4"
-                          : isListItem
-                          ? "mb-1"
-                          : "mb-4"
-                      }
-                    >
-                      {section.headline ? (
-                        <h2 className="text-2xl font-bold text-slate-100 mb-2 leading-10">
-                          {section.tokens.map((token, tokenIdx) => {
-                            // If token has no wordNormal, it's a space/punctuation - render directly
-                            if (!token.wordNormal) {
-                              return <span key={tokenIdx}>{token.value}</span>;
-                            }
-                            return (
-                              <span
-                                key={tokenIdx}
-                                className="relative inline-block"
-                              >
-                                <span
-                                  id={token.id}
-                                  className={`${
-                                    token.highlight
-                                      ? "bg-emerald-700 text-white"
-                                      : ""
-                                  } ${
-                                    token.redacted
-                                      ? "bg-slate-700 text-slate-700 select-none mb-2 align-top"
-                                      : "text-slate-100"
-                                  } ${
-                                    bouncingTokenId === token.id
-                                      ? "word-bounce"
-                                      : ""
-                                  }`}
-                                  style={{
-                                    cursor: token.redacted
-                                      ? "pointer"
-                                      : "default",
-                                  }}
-                                  onClick={() => {
-                                    if (token.redacted && token.id) {
-                                      setClickedTokenId(token.id);
-                                      setTimeout(
-                                        () => setClickedTokenId(null),
-                                        2000
-                                      );
-                                    }
-                                  }}
-                                >
-                                  {token.redacted
-                                    ? "█".repeat(
-                                        Math.max(token.value.length, 3)
-                                      )
-                                    : token.value}
-                                </span>
-                                {clickedTokenId === token.id &&
-                                  token.redacted && (
-                                    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-50">
-                                      {token.value.length} harf
-                                    </span>
-                                  )}
-                              </span>
-                            );
-                          })}
-                        </h2>
-                      ) : (
-                        <p className={isListItem ? "mb-0" : "mb-4"}>
-                          {section.tokens.map((token, tokenIdx) => {
-                            // If token has no wordNormal, it's a space/punctuation - render directly
-                            if (!token.wordNormal) {
-                              return <span key={tokenIdx}>{token.value}</span>;
-                            }
-                            return (
-                              <span
-                                key={tokenIdx}
-                                className="relative inline-block"
-                              >
-                                <span
-                                  id={token.id}
-                                  className={`${
-                                    token.highlight
-                                      ? "bg-emerald-700 text-white"
-                                      : ""
-                                  } ${
-                                    token.redacted
-                                      ? "bg-slate-700 text-slate-700 select-none mb-2 align-top"
-                                      : "text-slate-200"
-                                  } ${
-                                    bouncingTokenId === token.id
-                                      ? "word-bounce"
-                                      : ""
-                                  }`}
-                                  style={{
-                                    cursor: token.redacted
-                                      ? "pointer"
-                                      : "default",
-                                  }}
-                                  onClick={() => {
-                                    if (token.redacted && token.id) {
-                                      setClickedTokenId(token.id);
-                                      setTimeout(
-                                        () => setClickedTokenId(null),
-                                        2000
-                                      );
-                                    }
-                                  }}
-                                >
-                                  {token.redacted
-                                    ? "█".repeat(
-                                        Math.max(token.value.length, 3)
-                                      )
-                                    : token.value}
-                                </span>
-                                {clickedTokenId === token.id &&
-                                  token.redacted && (
-                                    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-50">
-                                      {token.value.length} harf
-                                    </span>
-                                  )}
-                              </span>
-                            );
-                          })}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                {renderedArticle}
               </div>
             )}
           </div>
 
           {/* Right: Sidebar - fixed position, bottom on mobile, right on desktop */}
-          <aside className="fixed bottom-0 left-0 right-0 md:right-0 md:left-auto md:top-0 md:bottom-auto w-full md:w-80 bg-slate-800 border-t md:border-t-0 md:border-l border-slate-700 text-slate-200 flex flex-col md:flex-col max-h-[50vh] md:max-h-none md:h-screen z-10 shadow-lg md:shadow-none overflow-hidden">
+          <aside className="fixed bottom-0 left-0 right-0 md:right-0 md:left-auto md:top-0 md:bottom-auto w-full md:w-80 bg-slate-800 border-t md:border-t-0 md:border-l border-slate-700 text-slate-200 flex flex-col md:flex-col max-h-[50vh] md:max-h-none md:h-screen z-10 shadow-lg md:shadow-none overflow-hidden pb-16 md:pb-0">
             {/* Mobile: Reverse order - Guesses first, Input last */}
             <div className="flex flex-col-reverse md:flex-col flex-1 min-h-0 overflow-hidden p-4">
               {/* Input Form - only show if game not solved - Mobile: bottom, Desktop: top */}
               {!gameState?.solved && !loading && (
                 <div className="mb-4 md:mb-4 mt-4 md:mt-0 shrink-0">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleGuess();
-                    }}
-                  >
-                    <input
-                      type="text"
-                      className="w-full box-border rounded-md bg-slate-700 border border-slate-600 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 placeholder:text-slate-500 transition-all"
-                      placeholder="Bir kelime yaz..."
-                      value={currentGuess}
-                      onChange={(e) => setCurrentGuess(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && handleGuess()}
-                      disabled={loading}
-                    />
-                  </form>
+                  <GuessInput 
+                    onGuess={(guess) => handleGuess(guess)} 
+                    disabled={loading} 
+                  />
                 </div>
               )}
 
@@ -1738,7 +1835,14 @@ const Redactle = () => {
                                 : "bg-slate-700/50 hover:bg-slate-700"
                             }`}
                           >
-                            <div className="font-semibold">{displayName}</div>
+                            <div className="flex items-center gap-2">
+                               <div className="font-semibold">{displayName}</div>
+                               {gameState.hintedWords?.[word] && (
+                                 <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight">
+                                   İpucu
+                                 </span>
+                               )}
+                             </div>
                             <div className="text-sm text-slate-400">
                               {count}
                             </div>
@@ -1750,6 +1854,63 @@ const Redactle = () => {
             </div>
           </aside>
         </div>
+
+        {/* Joker Buttons & Coins Section - Fixed Bottom */}
+        {!loading && (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 px-4 py-3 safe-area-bottom">
+            {isHintMode && (
+              <div className="fixed bottom-24 right-4 z-50 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="bg-[#1e1e22] text-white rounded-lg shadow-2xl py-3 px-5 flex items-center gap-4 min-w-[240px] border border-white/5">
+                  <span className="text-sm font-medium">Açmak için bir kelimeye tıkla.</span>
+                  <button 
+                    onClick={() => setIsHintMode(false)}
+                    className="text-slate-400 hover:text-white transition-colors ml-auto p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              {/* Left: Coins */}
+              <div className="flex items-center gap-1.5 text-orange-400">
+                <Diamond className="w-5 h-5" fill="currentColor" />
+                <span className="font-bold">{coins}</span>
+              </div>
+              
+              {/* Right: Joker Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleUseHint}
+                  disabled={hints <= 0 || gameState?.solved}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    hints > 0 && !gameState?.solved
+                      ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
+                      : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  <LightBulbIcon className="w-4 h-4" />
+                  <span>İpucu</span>
+                  <span className="ml-1 px-1.5 py-0.5 bg-slate-900/50 rounded text-xs">{hints}</span>
+                </button>
+                
+                <button
+                  onClick={handleUseSkip}
+                  disabled={skips <= 0 || gameState?.solved}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    skips > 0 && !gameState?.solved
+                      ? "bg-slate-800 text-pink-400 hover:bg-slate-700"
+                      : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  <ArrowBigRight className="w-4 h-4" fill="currentColor" />
+                  <span>Atla</span>
+                  <span className="ml-1 px-1.5 py-0.5 bg-slate-900/50 rounded text-xs">{skips}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* How to Play Modal */}
@@ -1959,6 +2120,24 @@ const Redactle = () => {
           animation: wordBounce 0.6s ease-in-out;
           display: inline-block;
           transform-origin: center;
+        }
+
+        /* Hint highlight effect */
+        @keyframes hintHighlight {
+          0%, 100% {
+            background-color: #475569;
+          }
+          50% {
+            background-color: #fbbf24;
+          }
+        }
+
+        .hint-highlight {
+          position: relative;
+          z-index: 5;
+          border: 2px solid #fbbf24;
+          border-radius: 4px;
+          cursor: crosshair !important;
         }
       `}</style>
     </main>
