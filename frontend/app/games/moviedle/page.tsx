@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  History,
 } from "lucide-react";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
@@ -110,6 +111,8 @@ const Moviedle = () => {
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [gameDay, setGameDay] = useState<number | null>(null);
   const [levelCompleted, setLevelCompleted] = useState(false);
+  const [showPreviousGames, setShowPreviousGames] = useState(false);
+  const [dailyMovies, setDailyMovies] = useState<DailyMovieEntry[]>([]);
   
   // Search modal states
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -169,22 +172,36 @@ const Moviedle = () => {
         // Günlük film takvimini yükle
         const dailyResponse = await fetch("/moviedle/daily_movies.json");
         const dailyData: DailyMoviesData = await dailyResponse.json();
+        setDailyMovies(dailyData.daily_movies);
         
-        // Bugünün tarihini al (YYYY-MM-DD formatı)
+        // URL'den tarih parametresini al
+        const dateParam = searchParams.get("date");
         const today = new Date().toISOString().split('T')[0];
+        const targetDate = dateParam || today;
         
-        // Bugünün filmini bul
-        const todayEntry = dailyData.daily_movies.find(entry => entry.date === today);
+        // Hedef tarihin filmini bul
+        const targetEntry = dailyData.daily_movies.find(entry => entry.date === targetDate);
         
-        if (todayEntry) {
+        if (targetEntry) {
           // Günlük film zaten cast, genre_ids dahil tüm bilgileri içeriyor
-          setTargetMovie(todayEntry.movie);
-          setGameDay(todayEntry.day);
+          setTargetMovie(targetEntry.movie);
+          setGameDay(targetEntry.day);
+          
+          // Yeni güne geçerken state'i sıfırla ki önceki günün sonucu görünmesin
+          setGuesses([]);
+          setGameState("playing");
+          setDailyCompleted(false);
         } else {
-          // Eğer bugün için film yoksa rastgele seç
-          const randomIndex = Math.floor(Math.random() * moviesData.movies.length);
-          setTargetMovie(moviesData.movies[randomIndex]);
-          setGameDay(null);
+          // Eğer bugün için film yoksa rastgele seç (sadece tarih parametresi yoksa)
+          // Eğer tarih parametresi varsa ve film yoksa, yine de rastgele seçebiliriz veya hata gösterebiliriz
+          // Şimdilik varsayılan davranış: rastgele
+          if (!dateParam) {
+            const randomIndex = Math.floor(Math.random() * moviesData.movies.length);
+            setTargetMovie(moviesData.movies[randomIndex]);
+            setGameDay(null);
+            setGuesses([]);
+            setGameState("playing");
+          }
         }
       } catch (error) {
         console.error("Film verileri yüklenemedi:", error);
@@ -194,7 +211,7 @@ const Moviedle = () => {
     };
 
     loadMovies();
-  }, []);
+  }, [searchParams]);
 
   // Oyun durumunu yükle - oyun numarası değiştiğinde
   useEffect(() => {
@@ -229,6 +246,9 @@ const Moviedle = () => {
       if (stateToLoad) {
         setGuesses(stateToLoad.guesses || []);
         setGameState(stateToLoad.gameState || "playing");
+      } else {
+        setGuesses([]);
+        setGameState("playing");
       }
       
       setTimeout(() => {
@@ -251,12 +271,8 @@ const Moviedle = () => {
       gameState
     };
 
-    // Always save to localStorage for ongoing games (as requested)
-    if (!isFinished) {
-      localStorage.setItem(`moviedle-game-${gameDay}`, JSON.stringify(stateToSave));
-    } else {
-      localStorage.removeItem(`moviedle-game-${gameDay}`);
-    }
+    // Always save to localStorage so history works and state persists
+    localStorage.setItem(`moviedle-game-${gameDay}`, JSON.stringify(stateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -365,6 +381,18 @@ const Moviedle = () => {
 
   const resetGame = () => {
     if (movies.length === 0) return;
+    
+    // If it's a daily game, just restart the current day
+    if (gameDay) {
+      setGuesses([]);
+      setSearchQuery("");
+      setGameState("playing");
+      localStorage.removeItem(`moviedle-game-${gameDay}`);
+      setDailyCompleted(false);
+      return;
+    }
+
+    // Otherwise pick a random movie (Practice Mode)
     const randomIndex = Math.floor(Math.random() * movies.length);
     setTargetMovie(movies[randomIndex]);
     setGuesses([]);
@@ -412,6 +440,84 @@ const Moviedle = () => {
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center py-4 px-4">
       <div className="w-full max-w-md">
+        {/* Previous Games Modal */}
+        {showPreviousGames && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/70 z-50"
+              onClick={() => setShowPreviousGames(false)}
+            />
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 rounded-xl border border-slate-600 p-6 max-w-sm w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <History className="w-5 h-5 text-emerald-400" />
+                  Önceki Günler
+                </h3>
+                <button
+                  onClick={() => setShowPreviousGames(false)}
+                  className="p-1 hover:bg-slate-700 rounded transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto pr-2 space-y-2 flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-700 [&::-webkit-scrollbar-thumb]:bg-slate-500 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-slate-400">
+                {dailyMovies
+                  .sort((a, b) => b.day - a.day)
+                  .filter(entry => new Date(entry.date) <= new Date())
+                  .map((entry) => {
+                    const isCurrentGame = gameDay === entry.day;
+                    const date = new Date(entry.date);
+                    const formattedDate = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+                    
+                    // Check local storage for completion
+                    const savedState = localStorage.getItem(`moviedle-game-${entry.day}`);
+                    let isWon = false;
+                    let isPlayed = false;
+                    if (savedState) {
+                      try {
+                        const parsed = JSON.parse(savedState);
+                        isWon = parsed.gameState === "won";
+                        isPlayed = true;
+                      } catch (e) {}
+                    }
+
+                    return (
+                      <button
+                        key={entry.day}
+                        onClick={() => {
+                          setShowPreviousGames(false);
+                          router.push(`/games/moviedle?date=${entry.date}`);
+                        }}
+                        className={`w-full p-3 rounded-lg border flex items-center justify-between transition-all ${
+                          isCurrentGame
+                            ? "bg-emerald-900/30 border-emerald-500/50 ring-1 ring-emerald-500/50"
+                            : "bg-slate-700/30 border-slate-700 hover:bg-slate-700/50"
+                        }`}
+                      >
+                        <div className="text-left">
+                          <div className="font-bold text-white">#{entry.day}</div>
+                          <div className="text-xs text-slate-400">{formattedDate}</div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                           {isWon ? (
+                            <span className="text-emerald-400 font-bold text-sm">Çözüldü</span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">Oyna</span>
+                          )}
+                          {isCurrentGame && (
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 ml-2" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Debug Modal */}
         {showDebugModal && targetMovie && (
           <>
@@ -520,6 +626,16 @@ const Moviedle = () => {
                         <span>Nasıl Oynanır</span>
                       </button>
                       <button
+                        className="w-full px-4 py-3 text-left hover:bg-slate-700 hover:mx-2 hover:rounded-md transition-all flex items-center gap-3"
+                        onClick={() => {
+                          setShowPreviousGames(true);
+                          setShowMenu(false);
+                        }}
+                      >
+                        <History className="w-5 h-5" />
+                        <span>Önceki Günler</span>
+                      </button>
+                      <button
                         className={`w-full px-4 py-3 text-left transition-all flex items-center gap-3 ${
                           gameState !== "playing"
                             ? "opacity-50 cursor-not-allowed"
@@ -548,7 +664,7 @@ const Moviedle = () => {
                         }}
                       >
                         <RotateCcw className="w-5 h-5" />
-                        <span>Yeni Oyun</span>
+                        <span>{gameDay ? "Sıfırla" : "Yeni Oyun"}</span>
                       </button>
                       {process.env.NODE_ENV === "development" && (
                         <button
@@ -648,7 +764,7 @@ const Moviedle = () => {
                 onClick={resetGame}
                 className="px-6 py-2 rounded-md bg-emerald-600 text-sm font-semibold hover:bg-emerald-700 transition-colors cursor-pointer"
               >
-                Yeni Oyun
+                {gameDay ? "Sıfırla" : "Yeni Oyun"}
               </button>
             )}
           </div>
