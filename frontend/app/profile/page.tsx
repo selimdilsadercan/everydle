@@ -42,9 +42,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { 
   useUserByFirebaseId, 
   useUserStats, 
-  useFriends, 
   usePendingRequests,
   useUserMutations,
+  useFriendsWithOnlineStatus,
+  useHeartbeat,
   QUERY_KEYS
 } from "@/hooks/useProfileData";
 
@@ -90,8 +91,11 @@ export default function ProfilePage() {
   // İstatistikleri çek (eğer backendUserId varsa)
   const stats = useUserStats(backendUserId);
 
-  // Arkadaşları çek
-  const { data: friends = [], isLoading: isFriendsLoading } = useFriends(backendUserId);
+  // Arkadaşları gerçek zamanlı online durumu ile çek
+  const { friends = [], isLoading: isFriendsLoading } = useFriendsWithOnlineStatus(backendUserId);
+  
+  // Heartbeat ile kullanıcının online durumunu güncelle
+  useHeartbeat(backendUserId);
   
   // İstekleri çek
   const { data: pendingRequests = [], isLoading: isRequestsLoading } = usePendingRequests(backendUserId);
@@ -546,11 +550,17 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg relative">
                     {friend.avatar ? <img src={friend.avatar} className="w-full h-full rounded-full" /> : "👤"}
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-slate-800 rounded-full" />
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-slate-800 rounded-full ${
+                      friend.isOnline ? 'bg-emerald-500' : 'bg-slate-500'
+                    }`} />
                   </div>
                   <div>
                     <p className="text-white font-bold text-sm">@{friend.username || "isimsiz"}</p>
-                    <p className="text-[10px] text-slate-500">Çevrimiçi</p>
+                    <p className={`text-[10px] ${
+                      friend.isOnline ? 'text-emerald-400' : 'text-slate-500'
+                    }`}>
+                      {friend.isOnline ? 'Çevrimici' : 'Cevrimdışı'}
+                    </p>
                   </div>
                 </div>
                 <button

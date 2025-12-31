@@ -318,3 +318,63 @@ export function useMatchHistory(userId: string | undefined, limit: number = 20) 
     },
   });
 }
+
+// ==================== PRESENCE HOOKS ====================
+
+import { sendHeartbeat, getPresence } from "@/app/profile/actions";
+
+// Hook for sending heartbeat to update online status
+export function useHeartbeat(userId: string | undefined) {
+  const queryClient = useQueryClient();
+  
+  React.useEffect(() => {
+    if (!userId) return;
+    
+    // Send initial heartbeat
+    sendHeartbeat(userId);
+    
+    // Send heartbeat every 30 seconds
+    const interval = setInterval(() => {
+      sendHeartbeat(userId);
+    }, 30000); // 30 seconds
+    
+    // Cleanup on unmount
+    return () => clearInterval(interval);
+  }, [userId]);
+}
+
+// Hook for getting online status of specific users
+export function useOnlineStatus(userIds: string[]) {
+  return useQuery({
+    queryKey: ["presence", ...userIds.sort()],
+    queryFn: () => getPresence(userIds),
+    enabled: userIds.length > 0,
+    refetchInterval: 15000, // Refresh every 15 seconds
+    select: (data) => {
+      if (data.data?.success && data.data.presence) {
+        return data.data.presence;
+      }
+      return {} as Record<string, { isOnline: boolean; lastSeen: string }>;
+    },
+  });
+}
+
+// Hook for getting online friends based on friends list
+export function useFriendsWithOnlineStatus(userId: string | undefined) {
+  const { data: friends = [], isLoading: isFriendsLoading } = useFriends(userId);
+  
+  const friendIds = friends.map(f => f.id);
+  const { data: onlineStatus = {} } = useOnlineStatus(friendIds);
+  
+  // Combine friends with their online status
+  const friendsWithStatus = friends.map(friend => ({
+    ...friend,
+    isOnline: onlineStatus[friend.id]?.isOnline || false,
+    lastSeen: onlineStatus[friend.id]?.lastSeen || '',
+  }));
+  
+  return {
+    friends: friendsWithStatus,
+    isLoading: isFriendsLoading,
+  };
+}

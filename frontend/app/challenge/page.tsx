@@ -748,9 +748,9 @@ export default function ChallengePage() {
                           {isCurrentUser && <span className="text-xs ml-1">(Sen)</span>}
                         </p>
                         <p className="text-xs text-slate-400">
-                          <span className="text-emerald-400">{entry.wins} galibiyet</span>
+                          <span className="text-emerald-400">{entry.wins}G</span>
                           {" / "}
-                          <span className="text-red-400">{entry.losses} mağlubiyet</span>
+                          <span className="text-red-400">{entry.losses}M</span>
                         </p>
                       </div>
                       
