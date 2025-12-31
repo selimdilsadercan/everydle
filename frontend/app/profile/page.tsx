@@ -32,6 +32,7 @@ import LoginModal from "@/components/LoginModal";
 import UsernameSetupModal from "@/components/UsernameSetupModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { ProfilePageSkeleton } from "@/components/SkeletonLoading";
+import { IncomingBattleRequests, SendBattleButton } from "@/components/FriendBattle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -528,6 +529,11 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Gelen Dostluk Savaşı Davetleri */}
+      {backendUserId && backendUser?.username && (
+        <IncomingBattleRequests userId={backendUserId} username={backendUser.username} />
+      )}
+
       {/* Friends List */}
       <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
@@ -563,12 +569,24 @@ export default function ProfilePage() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRemoveFriend(friend)}
-                  className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <UserMinus className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Dostluk Savaşı Butonu */}
+                  {backendUserId && backendUser?.username && (
+                    <SendBattleButton
+                      fromUserId={backendUserId}
+                      fromUsername={backendUser.username}
+                      toUserId={friend.id}
+                      toUsername={friend.username || "Arkadaş"}
+                      isOnline={friend.isOnline}
+                    />
+                  )}
+                  <button
+                    onClick={() => handleRemoveFriend(friend)}
+                    className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                  >
+                    <UserMinus className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))
           )}

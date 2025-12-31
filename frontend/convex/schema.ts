@@ -93,4 +93,27 @@ export default defineSchema({
     .index("by_odaId", ["odaId"])
     .index("by_encoreUserId", ["encoreUserId"])
     .index("by_lastSeen", ["lastSeen"]),
+
+  // Friend battle requests - dostluk savaşı davetleri
+  friendBattleRequests: defineTable({
+    fromUserId: v.string(), // Daveti gönderen (Encore user ID)
+    fromUsername: v.string(), // Gönderenin kullanıcı adı
+    fromOdaId: v.string(), // Gönderenin oda ID'si
+    toUserId: v.string(), // Daveti alan (Encore user ID)
+    toUsername: v.optional(v.string()), // Alanın kullanıcı adı
+    status: v.union(
+      v.literal("pending"), // Bekliyor
+      v.literal("accepted"), // Kabul edildi
+      v.literal("rejected"), // Reddedildi
+      v.literal("expired"), // Süresi doldu
+      v.literal("cancelled") // İptal edildi
+    ),
+    matchId: v.optional(v.id("matches")), // Kabul edilirse oluşturulan maç
+    createdAt: v.number(),
+    expiresAt: v.number(), // 60 saniye sonra expire olur
+  })
+    .index("by_fromUserId", ["fromUserId"])
+    .index("by_toUserId", ["toUserId"])
+    .index("by_status", ["status"])
+    .index("by_toUserId_status", ["toUserId", "status"]),
 });

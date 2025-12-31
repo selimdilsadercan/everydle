@@ -10,6 +10,7 @@
 
 import type * as bot from "../bot.js";
 import type * as encoreApi from "../encoreApi.js";
+import type * as friendBattle from "../friendBattle.js";
 import type * as game from "../game.js";
 import type * as matchmaking from "../matchmaking.js";
 import type * as presence from "../presence.js";
@@ -25,6 +26,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   bot: typeof bot;
   encoreApi: typeof encoreApi;
+  friendBattle: typeof friendBattle;
   game: typeof game;
   matchmaking: typeof matchmaking;
   presence: typeof presence;
