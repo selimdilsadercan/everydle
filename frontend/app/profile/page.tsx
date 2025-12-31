@@ -94,8 +94,8 @@ export default function ProfilePage() {
   // Arkadaşları gerçek zamanlı online durumu ile çek
   const { friends = [], isLoading: isFriendsLoading } = useFriendsWithOnlineStatus(backendUserId);
   
-  // Heartbeat ile kullanıcının online durumunu güncelle
-  useHeartbeat(backendUserId);
+  // Heartbeat ile kullanıcının online durumunu güncelle (Convex real-time)
+  useHeartbeat(backendUserId, backendUser?.username || undefined);
   
   // İstekleri çek
   const { data: pendingRequests = [], isLoading: isRequestsLoading } = usePendingRequests(backendUserId);

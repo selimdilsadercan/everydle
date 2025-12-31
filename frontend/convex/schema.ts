@@ -56,7 +56,6 @@ export default defineSchema({
     .index("by_odaId2", ["odaId2"])
     .index("by_status", ["status"]),
 
-  // Player game states - oyuncu oyun durumları
   playerStates: defineTable({
     matchId: v.id("matches"),
     odaId: v.string(),
@@ -83,4 +82,15 @@ export default defineSchema({
     .index("by_matchId", ["matchId"])
     .index("by_odaId", ["odaId"])
     .index("by_matchId_odaId", ["matchId", "odaId"]),
+
+  // User presence - çevrimiçi kullanıcıları takip etmek için
+  userPresence: defineTable({
+    odaId: v.string(), // Kullanıcının oda ID'si (benzersiz tanımlayıcı)
+    encoreUserId: v.optional(v.string()), // Encore backend user ID
+    username: v.optional(v.string()), // Kullanıcı adı
+    lastSeen: v.number(), // Son aktif görülme zamanı (timestamp)
+  })
+    .index("by_odaId", ["odaId"])
+    .index("by_encoreUserId", ["encoreUserId"])
+    .index("by_lastSeen", ["lastSeen"]),
 });

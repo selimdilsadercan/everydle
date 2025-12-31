@@ -12,6 +12,7 @@ import type * as bot from "../bot.js";
 import type * as encoreApi from "../encoreApi.js";
 import type * as game from "../game.js";
 import type * as matchmaking from "../matchmaking.js";
+import type * as presence from "../presence.js";
 import type * as users from "../users.js";
 import type * as wordleWords from "../wordleWords.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   encoreApi: typeof encoreApi;
   game: typeof game;
   matchmaking: typeof matchmaking;
+  presence: typeof presence;
   users: typeof users;
   wordleWords: typeof wordleWords;
 }>;

@@ -319,58 +319,72 @@ export function useMatchHistory(userId: string | undefined, limit: number = 20) 
   });
 }
 
-// ==================== PRESENCE HOOKS ====================
+// ==================== PRESENCE HOOKS (CONVEX - REAL-TIME) ====================
 
-import { sendHeartbeat, getPresence } from "@/app/profile/actions";
+import { useMutation as useConvexMutation, useQuery as useConvexQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
-// Hook for sending heartbeat to update online status
-export function useHeartbeat(userId: string | undefined) {
-  const queryClient = useQueryClient();
+// Cihaz ID'sini al (localStorage'dan)
+function getDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  let deviceId = localStorage.getItem("wordleDeviceId");
+  if (!deviceId) {
+    deviceId = "device_" + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    localStorage.setItem("wordleDeviceId", deviceId);
+  }
+  return deviceId;
+}
+
+/**
+ * Convex ile gerçek zamanlı heartbeat gönderen hook
+ * Her 30 saniyede bir presence günceller
+ */
+export function useConvexHeartbeat(encoreUserId: string | undefined, username?: string) {
+  const heartbeat = useConvexMutation(api.presence.heartbeat);
   
   React.useEffect(() => {
-    if (!userId) return;
+    if (!encoreUserId) return;
     
-    // Send initial heartbeat
-    sendHeartbeat(userId);
+    const deviceId = getDeviceId();
+    if (!deviceId) return;
     
-    // Send heartbeat every 30 seconds
+    // İlk heartbeat
+    heartbeat({ odaId: deviceId, encoreUserId, username });
+    
+    // Her 30 saniyede bir heartbeat
     const interval = setInterval(() => {
-      sendHeartbeat(userId);
-    }, 30000); // 30 seconds
+      heartbeat({ odaId: deviceId, encoreUserId, username });
+    }, 30000);
     
-    // Cleanup on unmount
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [encoreUserId, username, heartbeat]);
 }
 
-// Hook for getting online status of specific users
-export function useOnlineStatus(userIds: string[]) {
-  return useQuery({
-    queryKey: ["presence", ...userIds.sort()],
-    queryFn: () => getPresence(userIds),
-    enabled: userIds.length > 0,
-    refetchInterval: 15000, // Refresh every 15 seconds
-    select: (data) => {
-      if (data.data?.success && data.data.presence) {
-        return data.data.presence;
-      }
-      return {} as Record<string, { isOnline: boolean; lastSeen: string }>;
-    },
-  });
+/**
+ * Convex ile gerçek zamanlı online status sorgusu
+ * Bu reaktif - değişiklikler anında yansır, polling yok!
+ */
+export function useConvexOnlineStatus(encoreUserIds: string[]) {
+  return useConvexQuery(
+    api.presence.getOnlineStatus,
+    encoreUserIds.length > 0 ? { encoreUserIds } : "skip"
+  );
 }
 
-// Hook for getting online friends based on friends list
+/**
+ * Arkadaş listesini çevrimiçi durumu ile birleştiren hook (Convex based)
+ */
 export function useFriendsWithOnlineStatus(userId: string | undefined) {
   const { data: friends = [], isLoading: isFriendsLoading } = useFriends(userId);
   
   const friendIds = friends.map(f => f.id);
-  const { data: onlineStatus = {} } = useOnlineStatus(friendIds);
+  const onlineStatus = useConvexOnlineStatus(friendIds);
   
   // Combine friends with their online status
   const friendsWithStatus = friends.map(friend => ({
     ...friend,
-    isOnline: onlineStatus[friend.id]?.isOnline || false,
-    lastSeen: onlineStatus[friend.id]?.lastSeen || '',
+    isOnline: onlineStatus?.[friend.id]?.isOnline || false,
+    lastSeen: onlineStatus?.[friend.id]?.lastSeen || 0,
   }));
   
   return {
@@ -378,3 +392,6 @@ export function useFriendsWithOnlineStatus(userId: string | undefined) {
     isLoading: isFriendsLoading,
   };
 }
+
+// Legacy export for backward compatibility
+export const useHeartbeat = useConvexHeartbeat;
