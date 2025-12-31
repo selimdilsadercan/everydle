@@ -166,3 +166,27 @@ export async function addGiveups(
     };
   }
 }
+
+/**
+ * Reset daily reward (DEBUG ONLY - for testing)
+ */
+export async function resetDailyReward(
+  userId: string
+): Promise<ActionResponse<{ success: boolean; message?: string }>> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://staging-everydle-g6g3.encr.app";
+    const response = await fetch(`${baseUrl}/stars/daily/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    const data = await response.json();
+    return { data, error: null };
+  } catch (error) {
+    console.error("Failed to reset daily reward:", error);
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Failed to reset daily reward",
+    };
+  }
+}

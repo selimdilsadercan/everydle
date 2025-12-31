@@ -11,6 +11,7 @@ export interface UserStars {
     stars: number
     last_daily_claim: string | null
     daily_streak: number
+    daily_claims_count: number
     created_at: string
 }
 
@@ -58,6 +59,9 @@ export interface CanClaimDailyRewardResponse {
     success: boolean
     canClaim?: boolean
     lastClaim?: string | null
+    claimsToday?: number
+    claimsRemaining?: number
+    requiresVideo?: boolean
     error?: string
 }
 
@@ -70,6 +74,18 @@ export interface ClaimDailyRewardResponse {
     data?: UserStars
     reward?: number
     newStreak?: number
+    claimsToday?: number
+    claimsRemaining?: number
+    error?: string
+}
+
+export interface ResetDailyRewardRequest {
+    userId: string
+}
+
+export interface ResetDailyRewardResponse {
+    success: boolean
+    message?: string
     error?: string
 }
 
@@ -169,11 +185,20 @@ export const canClaimDailyReward = api(
                 return { success: false, error: error.message }
             }
 
-            const result = data as { can_claim: boolean; last_claim: string | null }
+            const result = data as { 
+                can_claim: boolean; 
+                last_claim: string | null;
+                claims_today: number;
+                claims_remaining: number;
+                requires_video: boolean;
+            }
             return { 
                 success: true, 
                 canClaim: result.can_claim,
-                lastClaim: result.last_claim
+                lastClaim: result.last_claim,
+                claimsToday: result.claims_today,
+                claimsRemaining: result.claims_remaining,
+                requiresVideo: result.requires_video
             }
         } catch (error) {
             return {
@@ -199,12 +224,52 @@ export const claimDailyReward = api(
                 return { success: false, error: error.message }
             }
 
-            const result = data as { stars: UserStars; reward: number; new_streak: number }
+            const result = data as { 
+                stars: UserStars; 
+                reward: number; 
+                new_streak: number;
+                claims_today: number;
+                claims_remaining: number;
+            }
             return { 
                 success: true, 
                 data: result.stars,
                 reward: result.reward,
-                newStreak: result.new_streak
+                newStreak: result.new_streak,
+                claimsToday: result.claims_today,
+                claimsRemaining: result.claims_remaining
+            }
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error occurred'
+            }
+        }
+    }
+)
+
+/**
+ * Reset daily reward (DEBUG ONLY)
+ */
+export const resetDailyReward = api(
+    { method: "POST", path: "/stars/daily/reset", expose: true },
+    async (req: ResetDailyRewardRequest): Promise<ResetDailyRewardResponse> => {
+        try {
+            const { error } = await supabase
+                .from('user_stars')
+                .update({ 
+                    last_daily_claim: null,
+                    daily_streak: 0
+                })
+                .eq('user_id', req.userId)
+
+            if (error) {
+                return { success: false, error: error.message }
+            }
+
+            return { 
+                success: true, 
+                message: 'Daily reward reset successfully'
             }
         } catch (error) {
             return {

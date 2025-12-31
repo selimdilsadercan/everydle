@@ -17,34 +17,12 @@ import {
 } from "./actions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUserByFirebaseId, useUserStats, useCanClaimReward, QUERY_KEYS } from "@/hooks/useProfileData";
-
-// Floating emoji component
-function FloatingEmoji({ emoji, onComplete }: { emoji: string; onComplete: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onComplete, 2000);
-    return () => clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-      <div className="animate-float-up text-8xl">{emoji}</div>
-    </div>
-  );
-}
-
-// Star particle component
-function StarParticle() {
-  return (
-    <div>
-      💎
-    </div>
-  );
-}
+import { RewardModal, RewardData } from "@/components/RewardModal";
 
 export default function StorePage() {
   const [promoCode, setPromoCode] = useState("");
-  const [showRewardAnimation, setShowRewardAnimation] = useState(false);
-  const [showCoinParticles, setShowCoinParticles] = useState(false);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [rewardData, setRewardData] = useState<RewardData>({ type: 'coins', amount: 50 });
   const [animatingCoins, setAnimatingCoins] = useState(false);
   const [displayCoins, setDisplayCoins] = useState(0);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -61,7 +39,10 @@ export default function StorePage() {
   const { stars: coins, hints, giveups: skips, isLoading: isStatsLoading } = useUserStats(backendUserId);
 
   // 3. Can Claim Reward
-  const { data: canClaim = false, isLoading: isRewardLoading } = useCanClaimReward(backendUserId);
+  const { data: claimInfo, isLoading: isRewardLoading } = useCanClaimReward(backendUserId);
+  const { canClaim, requiresVideo, claimsRemaining, claimsToday } = (claimInfo as any) || { canClaim: false, requiresVideo: false, claimsRemaining: 0, claimsToday: 0 };
+
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   // Loading state
   const dataLoading = !!user?.uid && (isUserLoading || isStatsLoading || isRewardLoading);
@@ -100,32 +81,45 @@ export default function StorePage() {
   // Handle daily reward claim
   const handleClaimReward = async () => {
     if (!canClaim || !backendUserId) return;
+
+    if (requiresVideo) {
+      setIsVideoPlaying(true);
+      // Simulate video playing for 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setIsVideoPlaying(false);
+    }
     
-    // Show emoji animation first
-    setShowRewardAnimation(true);
-    
-    // After emoji, show coin particles and update count
-    setTimeout(async () => {
-      setShowRewardAnimation(false);
-      setShowCoinParticles(true);
+    const result = await claimDailyReward(backendUserId);
+    if (result.data?.success && result.data.reward) {
+      // Set reward data and show modal
+      setRewardData({ type: 'coins', amount: result.data.reward });
+      setShowRewardModal(true);
       
-      const result = await claimDailyReward(backendUserId);
-      if (result.data?.success && result.data.reward) {
-        const newCoins = result.data.data?.stars || coins + result.data.reward;
-        animateCoinCount(coins, newCoins);
-        setLocalStreak(result.data.newStreak || localStreak + 1);
-        
-        // Invalidate caches
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.stars(backendUserId) });
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reward(backendUserId) });
-        triggerDataRefresh();
-      }
+      const newCoins = result.data.data?.stars || coins + result.data.reward;
       
-      // Hide particles after animation
+      // Invalidate caches
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.stars(backendUserId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reward(backendUserId) });
+      triggerDataRefresh();
+      
+      // Animate coins after modal closes
       setTimeout(() => {
-        setShowCoinParticles(false);
-      }, 1500);
-    }, 1500);
+        animateCoinCount(coins, newCoins);
+      }, 100);
+    }
+  };
+
+  // DEBUG: Reset daily reward
+  const handleResetDailyReward = async () => {
+    if (!backendUserId) return;
+    const { resetDailyReward } = await import("./actions");
+    await resetDailyReward(backendUserId);
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reward(backendUserId) });
+  };
+
+  // Handle reward modal close
+  const handleRewardModalClose = () => {
+    setShowRewardModal(false);
   };
 
   // Handle purchase
@@ -193,20 +187,12 @@ export default function StorePage() {
       {/* Header */}
       <Header />
 
-      {/* Reward Animation */}
-      {showRewardAnimation && (
-        <FloatingEmoji emoji="🎁" onComplete={() => {}} />
-      )}
-
-      {/* Coin Particles */}
-      {showCoinParticles && (
-        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center overflow-hidden">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <StarParticle key={i} />
-          ))}
-          <div className="text-6xl animate-bounce flex items-center gap-2">+50 <Diamond className="w-10 h-10 text-orange-400" fill="currentColor" /></div>
-        </div>
-      )}
+      {/* Reward Modal with Chest Animation */}
+      <RewardModal
+        show={showRewardModal}
+        onClose={handleRewardModalClose}
+        reward={rewardData}
+      />
 
       {/* Main Content */}
       <main className="max-w-lg mx-auto px-4 py-6">
@@ -253,20 +239,22 @@ export default function StorePage() {
                     <Gift className={`w-5 h-5 ${canClaim ? "text-emerald-400" : "text-slate-400"}`} />
                   </div>
                   <div>
-                    <h3 className="text-white font-medium">Günlük Ödülünü Topla</h3>
-                    <p className="text-slate-400 text-sm flex items-center gap-1">+50 <Diamond className="w-3.5 h-3.5 text-orange-400" fill="currentColor" /></p>
+                    <h3 className="text-white font-medium">Günlük Ödül ({claimsToday}/3)</h3>
+                    <p className="text-slate-400 text-sm flex items-center gap-1">
+                      {requiresVideo ? "Video İzle ve Al" : "+50"} <Diamond className="w-3.5 h-3.5 text-orange-400" fill="currentColor" />
+                    </p>
                   </div>
                 </div>
                 
-                {/* Streak dots */}
-                <div className="flex gap-1.5">
-                  {[1, 2, 3].map((day) => (
+                {/* Daily Reward Slots */}
+                <div className="flex gap-2">
+                  {[1, 2, 3].map((slot) => (
                     <div
-                      key={day}
-                      className={`w-3 h-3 rounded-full transition-all ${
-                        day <= localStreak
-                          ? "bg-emerald-500"
-                          : "bg-slate-600"
+                      key={slot}
+                      className={`w-4 h-4 rounded-full border-2 transition-all ${
+                        slot <= (claimsToday || 0)
+                          ? "bg-emerald-500 border-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                          : "bg-slate-700 border-slate-600"
                       }`}
                     />
                   ))}
@@ -275,15 +263,35 @@ export default function StorePage() {
               
               <button
                 onClick={handleClaimReward}
-                disabled={!canClaim || showRewardAnimation || showCoinParticles}
-                className={`w-full py-2.5 rounded-xl font-medium transition-all ${
-                  canClaim && !showRewardAnimation && !showCoinParticles
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-white"
+                disabled={!canClaim || isVideoPlaying || showRewardModal}
+                className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                  canClaim && !isVideoPlaying && !showRewardModal
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
                     : "bg-slate-700 text-slate-500 cursor-not-allowed"
                 }`}
               >
-                {canClaim ? "Ödülü Al" : "Bugün Alındı ✓"}
+                {isVideoPlaying ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Video İzleniyor...
+                  </>
+                ) : (
+                  <>
+                    {requiresVideo && <Gift className="w-5 h-5" />}
+                    {canClaim ? (requiresVideo ? "Video İzle ve Al" : "Ücretsiz Al") : "Bugünlük Bitti ✓"}
+                  </>
+                )}
               </button>
+
+              {/* Debug Reset Button - Only in development */}
+              {process.env.NODE_ENV === 'development' && (
+                <button 
+                  onClick={handleResetDailyReward}
+                  className="mt-2 w-full text-[10px] text-slate-500 hover:text-slate-400 uppercase tracking-widest"
+                >
+                  [Debug: Sıfırla]
+                </button>
+              )}
             </div>
 
             {/* Boosters Section */}
@@ -414,51 +422,6 @@ export default function StorePage() {
         title="Mağazaya Giriş Yap"
         message="Ödüllerinizi toplamak ve satın alma yapmak için giriş yapın."
       />
-
-      {/* Custom animations */}
-      <style jsx>{`
-        @keyframes float-up {
-          0% {
-            opacity: 0;
-            transform: scale(0.5) translateY(50px);
-          }
-          30% {
-            opacity: 1;
-            transform: scale(1.2) translateY(0);
-          }
-          70% {
-            opacity: 1;
-            transform: scale(1) translateY(-20px);
-          }
-          100% {
-            opacity: 0;
-            transform: scale(0.8) translateY(-100px);
-          }
-        }
-        
-        @keyframes star-burst {
-          0% {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0);
-          }
-          30% {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1.5);
-          }
-          100% {
-            opacity: 0;
-            transform: translate(-50%, -150%) scale(0.5);
-          }
-        }
-        
-        .animate-float-up {
-          animation: float-up 1.5s ease-out forwards;
-        }
-        
-        .animate-star-burst {
-          animation: star-burst 1.5s ease-out forwards;
-        }
-      `}</style>
     </div>
   );
 }

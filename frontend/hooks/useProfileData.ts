@@ -213,7 +213,7 @@ export function useCanClaimReward(userId: string | undefined) {
     queryKey: QUERY_KEYS.reward(userId || ""),
     queryFn: () => canClaimDailyReward(userId!),
     enabled: !!userId,
-    select: (data) => data.data?.canClaim || false,
+    select: (data) => data.data || { canClaim: false, requiresVideo: false, claimsRemaining: 0, claimsToday: 0 },
   });
 }
 
