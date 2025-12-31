@@ -223,6 +223,30 @@ export const submitGuess = mutation({
               });
             }
           }
+          
+          // Dostluk maçı ise Encore'a sonucu logla ama kupa DEĞİŞTİRME
+          if (match.isFriendlyMatch && match.player1EncoreId && match.player2EncoreId) {
+            const isPlayer1Winner = matchWinnerId === match.odaId1;
+            
+            await ctx.scheduler.runAfter(0, internal.encoreApi.logMatchResult, {
+              matchId: args.matchId,
+              player1Id: match.player1EncoreId,
+              player1Type: "user",
+              player1Name: match.username1,
+              player2Id: match.player2EncoreId,
+              player2Type: "user",
+              player2Name: match.username2,
+              winnerId: isPlayer1Winner ? match.player1EncoreId : match.player2EncoreId,
+              winnerType: "user",
+              player1Attempts: isPlayer1 ? newGuesses.length : (opponentState?.guesses.length || 0),
+              player2Attempts: isPlayer1 ? (opponentState?.guesses.length || 0) : newGuesses.length,
+              player1TrophyChange: 0, // Dostluk maçı - kupa değişimi yok
+              player2TrophyChange: 0, // Dostluk maçı - kupa değişimi yok
+              word: targetWord,
+              gameType: "wordle_friendly", // Dostluk maçı olarak işaretle
+            });
+            // NOT: Dostluk maçlarında applyUserMatchResult çağrılmaz - kupa etkilenmez
+          }
         } else {
           // Bir sonraki round' hazırlıkları - 10 saniye sonra resetlenecek
           const nextWord = getRandomWord();

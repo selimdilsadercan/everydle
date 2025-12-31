@@ -144,6 +144,7 @@ export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsernam
   const [showModal, setShowModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sentRequestId, setSentRequestId] = useState<Id<"friendBattleRequests"> | null>(null);
+  const [serverOdaId, setServerOdaId] = useState<string | null>(null);
   
   const sendRequest = useMutation(api.friendBattle.sendBattleRequest);
   const cancelRequest = useMutation(api.friendBattle.cancelBattleRequest);
@@ -156,11 +157,10 @@ export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsernam
   
   // Davet kabul edildiğinde maça git
   useEffect(() => {
-    if (sentRequest?.status === "accepted" && sentRequest.matchId) {
-      const deviceId = getDeviceId();
-      router.push(`/match/wordle?matchId=${sentRequest.matchId}&odaId=${deviceId}`);
+    if (sentRequest?.status === "accepted" && sentRequest.matchId && serverOdaId) {
+      router.push(`/match/wordle?matchId=${sentRequest.matchId}&odaId=${serverOdaId}`);
     }
-  }, [sentRequest, router]);
+  }, [sentRequest, router, serverOdaId]);
   
   const handleSendRequest = async () => {
     setIsSending(true);
@@ -172,8 +172,9 @@ export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsernam
         toUsername,
       });
       
-      if (result.success && result.requestId) {
+      if (result.success && result.requestId && result.odaId) {
         setSentRequestId(result.requestId as Id<"friendBattleRequests">);
+        setServerOdaId(result.odaId);
         setShowModal(true);
       }
     } catch (error) {

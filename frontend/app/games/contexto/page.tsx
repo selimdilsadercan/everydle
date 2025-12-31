@@ -21,7 +21,7 @@ import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { getUserStars } from "@/lib/userStars";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 import ClosestWordsModal from "./ClosestWordsModal";
 import HowToPlayModal from "./HowToPlayModal";
 import ConfirmModal from "./ConfirmModal";
@@ -222,36 +222,57 @@ const Contexto = () => {
     setInput("");
     setErrorMessage(null);
 
-    // LocalStorage'dan yükle
-    const savedGame = localStorage.getItem(`contexto-game-${gameNumber}`);
-    if (savedGame) {
-      try {
-        const parsed = JSON.parse(savedGame);
-        setGuesses(parsed.guesses || []);
-        setGameWon(parsed.gameWon || false);
-        setGaveUp(parsed.gaveUp || false);
-        setHintsUsed(parsed.hintsUsed || 0);
-        setLastGuessedWord(parsed.lastGuessedWord || null);
-      } catch (e) {
-        console.error("Oyun verisi yüklenemedi:", e);
-      }
-    }
+    const loadState = async () => {
+      let stateToLoad = null;
 
-    // Yükleme bitince kaydetmeye izin ver
-    setTimeout(() => {
-      isInitialMount.current = false;
-    }, 0);
-  }, [gameNumber]);
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "contexto", gameNumber);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
+        }
+      }
+
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const savedGame = localStorage.getItem(`contexto-game-${gameNumber}`);
+        if (savedGame) {
+          try {
+            stateToLoad = JSON.parse(savedGame);
+          } catch (e) {
+            console.error("Oyun verisi yüklenemedi:", e);
+          }
+        }
+      }
+
+      // 3. Apply state
+      if (stateToLoad) {
+        setGuesses(stateToLoad.guesses || []);
+        setGameWon(stateToLoad.gameWon || false);
+        setGaveUp(stateToLoad.gaveUp || false);
+        setHintsUsed(stateToLoad.hintsUsed || 0);
+        setLastGuessedWord(stateToLoad.lastGuessedWord || null);
+      }
+
+      // Yükleme bitince kaydetmeye izin ver
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 0);
+    };
+
+    loadState();
+  }, [gameNumber, backendUserId]);
 
   // Oyun durumunu kaydet - sadece değişiklik yapıldığında
   useEffect(() => {
     // İlk render'da kaydetme
     if (isInitialMount.current) {
-      isInitialMount.current = false;
       return;
     }
 
-    const gameState = {
+    const isFinished = gameWon || gaveUp;
+
+    const gameStateToSave = {
       gameNumber,
       guesses,
       gameWon,
@@ -259,11 +280,26 @@ const Contexto = () => {
       hintsUsed,
       lastGuessedWord,
     };
-    localStorage.setItem(
-      `contexto-game-${gameNumber}`,
-      JSON.stringify(gameState)
-    );
-  }, [gameNumber, guesses, gameWon, gaveUp, hintsUsed, lastGuessedWord]);
+
+    // Always save to localStorage for ongoing games (as requested)
+    if (!isFinished) {
+      localStorage.setItem(`contexto-game-${gameNumber}`, JSON.stringify(gameStateToSave));
+    } else {
+      localStorage.removeItem(`contexto-game-${gameNumber}`);
+    }
+
+    // Save to Encore if logged in
+    if (backendUserId) {
+      saveGameState(
+        backendUserId,
+        "contexto",
+        gameNumber,
+        gameStateToSave as any,
+        isFinished,
+        gameWon
+      );
+    }
+  }, [gameNumber, guesses, gameWon, gaveUp, hintsUsed, lastGuessedWord, backendUserId]);
 
   // JSON'u yükle - oyun numarası değiştiğinde
   useEffect(() => {

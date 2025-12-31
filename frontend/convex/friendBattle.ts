@@ -1,19 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-
-// Rastgele kelime seçimi için
-const WORDS = [
-  "ADRES", "BAHÇE", "CADDE", "DALGA", "ELMAS", "FENER", "GITAR", "HAYAL", "ISLIK", "JOKER",
-  "KALEM", "LAMBA", "MAKAS", "NAZAR", "OKUMA", "PASTA", "RADYO", "SABAH", "TABAK", "UFKUM",
-  "VAPUR", "YAKUT", "ZAMAN", "ATLAS", "BIBER", "CEVIZ", "DENIZ", "ERBAP", "FASUL", "GIDER",
-  "HAFIZ", "IMDAT", "JELIK", "KALIP", "LIMON", "MANAV", "NOTER", "OLMAK", "PETEK", "RESIM",
-  "SALON", "TAKIP", "USARE", "VATAN", "YALIN", "ZEMIN", "ARMUT", "BULUT", "CANTA", "DOLAP"
-];
-
-function getRandomWord(): string {
-  return WORDS[Math.floor(Math.random() * WORDS.length)];
-}
+import { getRandomWord } from "./wordleWords";
 
 function generateOdaId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -71,7 +59,7 @@ export const sendBattleRequest = mutation({
 
 /**
  * Dostluk savaşı davetini kabul et
- */
+ */ 
 export const acceptBattleRequest = mutation({
   args: {
     requestId: v.id("friendBattleRequests"),
@@ -93,7 +81,7 @@ export const acceptBattleRequest = mutation({
       return { success: false, error: "Davet süresi dolmuş" };
     }
     
-    // Maç oluştur
+    // Maç oluştur - Dostluk maçı olarak işaretle (kupa etkilemez)
     const targetWord = getRandomWord();
     const matchId = await ctx.db.insert("matches", {
       odaId1: request.fromOdaId,
@@ -106,6 +94,7 @@ export const acceptBattleRequest = mutation({
       player1EncoreId: request.fromUserId,
       player2EncoreId: request.toUserId,
       isBotMatch: false,
+      isFriendlyMatch: true, // Dostluk maçı - kupa etkilemez
       bestOf: 3, // 2'de biten (best of 3)
       score1: 0,
       score2: 0,

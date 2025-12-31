@@ -21,7 +21,7 @@ import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 
 // Genre ID -> İsim eşleştirmesi
 const GENRE_MAP: Record<number, string> = {
@@ -187,6 +187,81 @@ const Moviedle = () => {
 
     loadMovies();
   }, []);
+
+  // Oyun durumunu yükle - oyun numarası değiştiğinde
+  useEffect(() => {
+    if (!gameDay) return;
+    
+    isInitialMount.current = true;
+
+    const loadState = async () => {
+      let stateToLoad = null;
+
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "moviedle", gameDay);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
+        }
+      }
+
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const saved = localStorage.getItem(`moviedle-game-${gameDay}`);
+        if (saved) {
+          try {
+            stateToLoad = JSON.parse(saved);
+          } catch (e) {
+            console.error("Oyun verisi yüklenemedi:", e);
+          }
+        }
+      }
+
+      // 3. Apply state
+      if (stateToLoad) {
+        setGuesses(stateToLoad.guesses || []);
+        setGameState(stateToLoad.gameState || "playing");
+      }
+      
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 0);
+    };
+
+    loadState();
+  }, [gameDay, backendUserId]);
+
+  // Oyun durumunu kaydet
+  useEffect(() => {
+    if (isInitialMount.current || !gameDay) {
+      return;
+    }
+
+    const isFinished = gameState !== "playing";
+    const stateToSave = {
+      guesses,
+      gameState
+    };
+
+    // Always save to localStorage for ongoing games (as requested)
+    if (!isFinished) {
+      localStorage.setItem(`moviedle-game-${gameDay}`, JSON.stringify(stateToSave));
+    } else {
+      localStorage.removeItem(`moviedle-game-${gameDay}`);
+    }
+
+    // Save to Encore if logged in
+    if (backendUserId) {
+      saveGameState(
+        backendUserId,
+        "moviedle",
+        gameDay,
+        stateToSave as any,
+        isFinished,
+        gameState === "won"
+      );
+    }
+  }, [guesses, gameState, gameDay, backendUserId]);
 
   // Arama filtreleme - filtre/arama yoksa popüler filmler, varsa filtrelenmiş sonuçlar
   const filteredMovies = useMemo(() => {

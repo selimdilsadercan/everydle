@@ -3,13 +3,17 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Info, Calendar, Circle, CheckCircle2, Map as MapIcon, Bug } from "lucide-react";
+import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Info, Calendar, Circle, CheckCircle2, Map as MapIcon, Bug, Diamond } from "lucide-react";
+import { LightBulbIcon } from "@heroicons/react/24/solid";
+import { getUserStars } from "@/lib/userStars";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
 
 const RANKS = [
   "2",
@@ -139,6 +143,17 @@ const Pokerdle = () => {
   const [showPreviousGames, setShowPreviousGames] = useState(false);
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [selectedGuessIndex, setSelectedGuessIndex] = useState<number | null>(null);
+
+  // Hint system states
+  // Hint system states
+  const { hints: backendHints, stars: backendCoins, isLoading: isStatsLoading, giveups } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
+  const [revealedHintPositions, setRevealedHintPositions] = useState<number[]>([]); // Açılan harf pozisyonları (0-4)
+  
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const coins = backendUserId ? backendCoins : localCoins;
   
   // Calculate status for each card based on all previous guesses
   const cardStatuses = (() => {
@@ -168,6 +183,78 @@ const Pokerdle = () => {
     }
     return getTodaysGameNumber();
   });
+
+  // Joker ve coin değerlerini yükle (Local Storage fallback)
+  useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+
+    const savedHints = localStorage.getItem("everydle-hints");
+    if (savedHints) setLocalHints(parseInt(savedHints));
+    setLocalCoins(getUserStars());
+    
+    const handleStorageChange = () => {
+      const h = localStorage.getItem("everydle-hints");
+      if (h) setLocalHints(parseInt(h));
+      setLocalCoins(getUserStars());
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [backendUserId]);
+
+  // İpucu kullanma fonksiyonu - rastgele bir pozisyonu açar
+  const handleUseHint = async () => {
+    if (hints <= 0 || !targetHand || gameState !== "playing") return;
+    
+    // Önceki tahminlerde doğru bulunan pozisyonları bul
+    const correctPositions: number[] = [];
+    guesses.forEach(prevGuess => {
+      prevGuess.forEach((cardData, idx) => {
+        if (cardData.state === "correct" && !correctPositions.includes(idx)) {
+          correctPositions.push(idx);
+        }
+      });
+    });
+    
+    // Açılmamış VE önceki tahminlerde doğru bulunmamış pozisyonları bul
+    const unopenedPositions = [0, 1, 2, 3, 4].filter(pos => 
+      !revealedHintPositions.includes(pos) && !correctPositions.includes(pos)
+    );
+    
+    if (unopenedPositions.length === 0) return;
+
+    // Backend call for hints if logged in
+    if (backendUserId) {
+      const result = await useHint(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Hint kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
+      }
+      // UI update happens automatically via react-query invalidation in useHint action (if implemented)
+      // or we rely on the hook to update.
+      // Ideally dispatch event to refresh stats
+      triggerDataRefresh(); 
+    } else {
+      // Local storage update
+      const newHintCount = localHints - 1;
+      localStorage.setItem("everydle-hints", newHintCount.toString());
+      setLocalHints(newHintCount);
+      triggerDataRefresh();
+    }
+    
+    // Rastgele bir pozisyon seç
+    const randomIndex = Math.floor(Math.random() * unopenedPositions.length);
+    const positionToReveal = unopenedPositions[randomIndex];
+    
+    // Pozisyonu aç
+    setRevealedHintPositions(prev => [...prev, positionToReveal]);
+    
+    // Eğer bu kart kullanıcının seçtikleri arasında varsa, oradan çıkar (çünkü artık ipucu ile sabitlendi)
+    const cardToReveal = targetHand.cards[positionToReveal];
+    if (selectedCards.includes(cardToReveal)) {
+      setSelectedCards(prev => prev.filter(c => c !== cardToReveal));
+    }
+  };
 
   // Load daily hands from JSON
   useEffect(() => {
@@ -209,48 +296,93 @@ const Pokerdle = () => {
     }
     
     // Load saved game state
-    const savedGame = localStorage.getItem(`pokerdle-game-${gameNumber}`);
-    if (savedGame) {
-      try {
-        const parsed = JSON.parse(savedGame);
-        setGuesses(parsed.guesses || []);
-        setGameState(parsed.gameWon ? "won" : parsed.gameLost ? "lost" : "playing");
-        setSelectedCards([]);
-      } catch (e) {
-        console.error("Oyun verisi yüklenemedi:", e);
+    const loadState = async () => {
+      // Set initial mount to true to prevent saving empty state
+      isInitialMount.current = true;
+      let stateToLoad = null;
+
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "pokerdle", gameNumber);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
+        }
       }
-    } else {
-      // Reset state for new game
-      setGuesses([]);
-      setGameState("playing");
-      setSelectedCards([]);
-    }
-  }, [gameNumber, dailyHands]);
+
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const savedGame = localStorage.getItem(`pokerdle-game-${gameNumber}`);
+        if (savedGame) {
+          try {
+            stateToLoad = JSON.parse(savedGame);
+          } catch (e) {
+            console.error("Oyun verisi yüklenemedi:", e);
+          }
+        }
+      }
+
+      // 3. Apply state
+      if (stateToLoad) {
+        setGuesses(stateToLoad.guesses || []);
+        setGameState(stateToLoad.gameWon ? "won" : stateToLoad.gameLost ? "lost" : "playing");
+        setRevealedHintPositions(stateToLoad.revealedHintPositions || []);
+        setSelectedCards([]);
+      } else {
+        // Reset state for new game
+        setGuesses([]);
+        setGameState("playing");
+        setRevealedHintPositions([]);
+        setSelectedCards([]);
+      }
+
+      // Loading finished, allow saving
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 0);
+    };
+
+    loadState();
+  }, [gameNumber, dailyHands, backendUserId]);
 
   // Save game state
   useEffect(() => {
-    if (!targetHand) return;
+    if (!targetHand || isInitialMount.current) return;
     
     const savedState = {
       gameNumber,
       guesses,
       gameWon: gameState === "won",
       gameLost: gameState === "lost",
+      revealedHintPositions
     };
-    localStorage.setItem(`pokerdle-game-${gameNumber}`, JSON.stringify(savedState));
-  }, [gameNumber, guesses, gameState, targetHand]);
+
+    // Always save to localStorage for ongoing games (as requested)
+    if (gameState === "playing") {
+      localStorage.setItem(`pokerdle-game-${gameNumber}`, JSON.stringify(savedState));
+    } else {
+      // If game is finished, remove from localStorage to follow "only for ongoing" rule
+      localStorage.removeItem(`pokerdle-game-${gameNumber}`);
+    }
+
+    // Save to Encore if logged in
+    if (backendUserId) {
+      saveGameState(
+        backendUserId,
+        "pokerdle",
+        gameNumber,
+        savedState as any,
+        gameState !== "playing",
+        gameState === "won"
+      );
+    }
+  }, [gameNumber, guesses, gameState, targetHand, revealedHintPositions, backendUserId]);
 
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
   const isInitialMount = useRef(true);
   
   // Set isInitialMount to false after initial render
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      isInitialMount.current = false;
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
+
   
   // Oyun kazanıldığında günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
   useEffect(() => {
@@ -350,10 +482,8 @@ const Pokerdle = () => {
       setSelectedCards(sortCardsByRank(newCards));
       setMessage("");
     } else {
-      // User requested no cards to be disabled, so we allow re-selecting 
-      // even if they were marked absent or present before.
-
-      if (selectedCards.length < 5) {
+      // User can only pick up to (5 - total hint positions) cards
+      if (selectedCards.length < (5 - revealedHintPositions.length)) {
         const newCards = [...selectedCards, card];
         setSelectedCards(sortCardsByRank(newCards));
         setMessage("");
@@ -364,16 +494,30 @@ const Pokerdle = () => {
   const handleGuess = () => {
     if (!targetHand) return;
 
-    if (selectedCards.length !== 5) {
+    // Build the full guess from hints and selected cards
+    const fullGuess = Array(5).fill(null);
+    revealedHintPositions.forEach(pos => {
+      fullGuess[pos] = targetHand.cards[pos];
+    });
+    
+    let userCardIdx = 0;
+    for (let i = 0; i < 5; i++) {
+      if (fullGuess[i] === null && userCardIdx < selectedCards.length) {
+        fullGuess[i] = selectedCards[userCardIdx];
+        userCardIdx++;
+      }
+    }
+
+    if (fullGuess.some(c => c === null)) {
       setMessage("Select exactly 5 cards!");
       setTimeout(() => setMessage(""), 2000);
       return;
     }
 
-    const evaluated = evaluateGuess(selectedCards);
+    const evaluated = evaluateGuess(fullGuess);
     setGuesses([...guesses, evaluated]);
 
-    if (selectedCards.every((card, idx) => card === targetHand.cards[idx])) {
+    if (fullGuess.every((card, idx) => card === targetHand.cards[idx])) {
       setGameState("won");
       setMessage(`Congratulations! You found ${targetHand.name}!`);
       
@@ -388,18 +532,20 @@ const Pokerdle = () => {
           completeLevelBackend(backendUserId, lid);
         }
       }
-    } else if (guesses.length === 5) {
+    } else if (guesses.length === 6) {
       setGameState("lost");
       setMessage(`Game Over! The hand was ${targetHand.name}`);
     } else {
       setSelectedCards([]);
+      setRevealedHintPositions([]); // Clear hints for next row like Wordle
     }
-  };
+  };  
 
   const resetGame = () => {
     // Hedef eli değiştirme - sadece tahminleri ve oyun durumunu sıfırla
     setGuesses([]);
     setSelectedCards([]);
+    setRevealedHintPositions([]);
     setGameState("playing");
     setMessage("");
     setDailyCompleted(false);
@@ -630,7 +776,7 @@ const Pokerdle = () => {
           {gameState === "playing" && (
             <div className="flex items-center gap-4 text-sm font-semibold">
               <span>
-                Tahmin: <span className="text-slate-400">{guesses.length}</span>
+                Tahmin: <span className="text-slate-400">{guesses.length} / 7</span>
               </span>
             </div>
           )}
@@ -756,7 +902,7 @@ const Pokerdle = () => {
         {/* 6x5 Grid - Guesses and Current Selection - Scrollable */}
         <div className="mb-6">
           {/* Scrollable container for grid + feedback - full height when game is finished */}
-          <div className={`${gameState === "playing" ? "max-h-[180px] overflow-y-scroll" : ""} overflow-x-hidden pr-1`}>
+          <div className={`${gameState === "playing" ? "max-h-[140px] overflow-y-scroll" : ""} overflow-x-hidden pr-1`}>
             <div className="flex gap-4 items-start justify-center">
               {/* Grid */}
               <div className="space-y-2 min-w-[200px]">
@@ -803,26 +949,42 @@ const Pokerdle = () => {
               {gameState === "playing" && (
                 <div className="grid grid-cols-5 gap-2">
                   {Array.from({ length: 5 }).map((_, col) => {
-                    const card = selectedCards[col];
+                    // Check if this position is a hint
+                    const isHintPos = revealedHintPositions.includes(col);
+                    
+                    let card = null;
+                    if (isHintPos) {
+                      card = targetHand?.cards[col];
+                    } else {
+                      // Find which user selected card goes here
+                      const precedingHintCount = revealedHintPositions.filter(p => p < col).length;
+                      const userIdx = col - precedingHintCount;
+                      card = selectedCards[userIdx];
+                    }
+
                     if (card) {
                       const suit = card.slice(-1);
                       const rank = card.slice(0, -1);
                       return (
                         <div
                           key={`current-${col}`}
-                          className="aspect-[0.75] bg-slate-800 rounded border border-slate-600 flex flex-col items-center justify-center"
+                          className={`aspect-[0.75] rounded flex flex-col items-center justify-center ${
+                            isHintPos 
+                              ? "bg-emerald-600 border-2 border-emerald-400" 
+                              : "bg-slate-800 border border-slate-600"
+                          }`}
                         >
                           <div
-                            className={`text-base font-bold leading-tight ${getSuitColor(
-                              suit
-                            )}`}
+                            className={`text-base font-bold leading-tight ${
+                              isHintPos ? "text-white" : getSuitColor(suit)
+                            }`}
                           >
                             {rank}
                           </div>
                           <div
-                            className={`text-lg leading-tight ${getSuitColor(
-                              suit
-                            )}`}
+                            className={`text-lg leading-tight ${
+                              isHintPos ? "text-white" : getSuitColor(suit)
+                            }`}
                           >
                             {suit}
                           </div>
@@ -843,7 +1005,7 @@ const Pokerdle = () => {
               {Array.from({
                 length: Math.max(
                   0,
-                  6 - guesses.length - (gameState === "playing" ? 1 : 0)
+                  7 - guesses.length - (gameState === "playing" ? 1 : 0)
                 ),
               }).map((_, row) => (
                 <div
@@ -862,7 +1024,7 @@ const Pokerdle = () => {
 
             {/* Feedback messages - outside grid */}
             <div className="space-y-[11px]">
-              {Array.from({ length: 6 }).map((_, row) => {
+              {Array.from({ length: 7 }).map((_, row) => {
                 const guess = guesses[row];
                 if (guess) {
                   const guessCards = guess.map((g) => g.card);
@@ -961,6 +1123,8 @@ const Pokerdle = () => {
                       const card = `${rank}${suit}`;
                       const isSelected = selectedCards.includes(card);
                       const status = cardStatuses[card];
+                      // Check if card is one of the hint revealed cards
+                      const isHintCard = revealedHintPositions.some(pos => targetHand?.cards[pos] === card);
                       
                       let bgColor = "bg-slate-800";
                       let textColor = "text-slate-100";
@@ -974,7 +1138,11 @@ const Pokerdle = () => {
                         borderColor = "border-transparent";
                       }
                       
-                      if (isSelected) {
+                      // Hint ile açılan kartlar yeşil border alır
+                      if (isHintCard) {
+                        borderColor = "border-emerald-400 border-2";
+                        bgColor = "bg-emerald-600";
+                      } else if (isSelected) {
                         borderColor = "border-white border-2";
                       }
 
@@ -1001,6 +1169,7 @@ const Pokerdle = () => {
                         const card = `${rank}${suit}`;
                         const isSelected = selectedCards.includes(card);
                         const status = cardStatuses[card];
+                        const isHintCard = revealedHintPositions.some(pos => targetHand?.cards[pos] === card);
                         
                         let bgColor = "bg-slate-800";
                         let textColor = "text-slate-100";
@@ -1014,7 +1183,11 @@ const Pokerdle = () => {
                           borderColor = "border-transparent";
                         }
                         
-                        if (isSelected) {
+                        // Hint ile açılan kartlar yeşil border alır
+                        if (isHintCard) {
+                          borderColor = "border-emerald-400 border-2";
+                          bgColor = "bg-emerald-600";
+                        } else if (isSelected) {
                           borderColor = "border-white border-2";
                         }
 
@@ -1042,7 +1215,7 @@ const Pokerdle = () => {
             <div className="flex gap-1 justify-center w-full">
               <button
                 onClick={handleGuess}
-                disabled={selectedCards.length !== 5}
+                disabled={(selectedCards.length + revealedHintPositions.length) !== 5}
                 className="w-11 h-12 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors font-bold text-[10px] disabled:cursor-not-allowed"
               >
                 ENTER
@@ -1054,6 +1227,7 @@ const Pokerdle = () => {
                 const card = `${rank}${suit}`;
                 const isSelected = selectedCards.includes(card);
                 const status = cardStatuses[card];
+                const isHintCard = revealedHintPositions.some(pos => targetHand?.cards[pos] === card);
                 
                 let bgColor = "bg-slate-800";
                 let textColor = "text-slate-100";
@@ -1067,7 +1241,11 @@ const Pokerdle = () => {
                   borderColor = "border-transparent";
                 }
                 
-                if (isSelected) {
+                // Hint ile açılan kartlar yeşil border alır
+                if (isHintCard) {
+                  borderColor = "border-emerald-400 border-2";
+                  bgColor = "bg-emerald-600";
+                } else if (isSelected) {
                   borderColor = "border-white border-2";
                 }
 
@@ -1089,8 +1267,10 @@ const Pokerdle = () => {
               <button
                 onClick={() => {
                   if (selectedCards.length > 0) {
-                    const newCards = selectedCards.slice(0, -1);
-                    setSelectedCards(newCards);
+                    if (selectedCards.length > 0) {
+                      const newCards = selectedCards.slice(0, -1);
+                      setSelectedCards(newCards);
+                    }
                   }
                 }}
                 disabled={selectedCards.length === 0}
@@ -1101,6 +1281,39 @@ const Pokerdle = () => {
             </div>
           </div>
         )}
+
+        {/* Joker Buttons & Coins Section - Fixed Bottom */}
+        {gameState === "playing" && (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 px-4 py-3 safe-area-bottom">
+            <div className="max-w-lg mx-auto flex items-center justify-between">
+              {/* Left: Coins */}
+              <div className="flex items-center gap-1.5 text-orange-400">
+                <Diamond className="w-5 h-5" fill="currentColor" />
+                <span className="font-bold">{coins}</span>
+              </div>
+              
+              {/* Right: Hint Button */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleUseHint}
+                  disabled={hints <= 0 || revealedHintPositions.length >= 5}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    hints > 0 && revealedHintPositions.length < 5
+                      ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
+                      : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  <LightBulbIcon className="w-4 h-4" />
+                  <span>İpucu</span>
+                  <span className="ml-1 px-1.5 py-0.5 bg-slate-900/50 rounded text-xs">{hints}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Bottom Spacer for Fixed Joker Bar */}
+        {gameState === "playing" && <div className="h-16" />}
       </div>
 
       {/* How To Play Modal */}
@@ -1127,7 +1340,7 @@ const Pokerdle = () => {
             {/* Content */}
             <div className="p-4 space-y-4 text-slate-300">
               <p className="text-base leading-relaxed">
-                <strong>Pokerdle</strong>, 5 tahmin hakkınız olan bir poker eli tahmin oyunudur.
+                <strong>Pokerdle</strong>, 7 tahmin hakkınız olan bir poker eli tahmin oyunudur.
               </p>
 
               <p className="text-base leading-relaxed">

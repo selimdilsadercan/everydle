@@ -168,6 +168,44 @@ export async function addGiveups(
 }
 
 /**
+ * Use a hint
+ */
+export async function useHint(
+  userId: string
+): Promise<ActionResponse<inventory.UseHintResponse>> {
+  try {
+    const client = createServerClient();
+    const response = await client.inventory.useHint({ userId });
+    return { data: response, error: null };
+  } catch (error) {
+    console.error("Failed to use hint:", error);
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Failed to use hint",
+    };
+  }
+}
+
+/**
+ * Use a giveup
+ */
+export async function useGiveup(
+  userId: string
+): Promise<ActionResponse<inventory.UseGiveupResponse>> {
+  try {
+    const client = createServerClient();
+    const response = await client.inventory.useGiveup({ userId });
+    return { data: response, error: null };
+  } catch (error) {
+    console.error("Failed to use giveup:", error);
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Failed to use giveup",
+    };
+  }
+}
+
+/**
  * Reset daily reward (DEBUG ONLY - for testing)
  */
 export async function resetDailyReward(

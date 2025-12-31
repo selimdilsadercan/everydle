@@ -24,7 +24,7 @@ import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { getUserStars } from "@/lib/userStars";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
 
@@ -440,7 +440,7 @@ const Wordle = () => {
     updateTargetWord();
   }, [gameNumber, targetWords]);
 
-  // LocalStorage'dan oyun durumunu yükle - oyun numarası değiştiğinde
+  // Oyun durumunu yükle - oyun numarası değiştiğinde
   useEffect(() => {
     isInitialMount.current = true;
 
@@ -450,25 +450,46 @@ const Wordle = () => {
     setMessage("");
     setRevealedHints([]); // İpucu ile açılan harfleri sıfırla
 
-    const savedGame = localStorage.getItem(`wordle-game-${gameNumber}`);
-    if (savedGame) {
-      try {
-        const parsed = JSON.parse(savedGame);
-        setGuesses(parsed.guesses || []);
-        setGameState(
-          parsed.gameWon ? "won" : parsed.gameLost ? "lost" : "playing"
-        );
-        setCurrentGuess(parsed.currentGuess || "");
-        setRevealedHints(parsed.revealedHints || []); // Kaydedilmiş ipucuları yükle
-      } catch (e) {
-        console.error("Oyun verisi yüklenemedi:", e);
-      }
-    }
+    const loadState = async () => {
+      let stateToLoad = null;
 
-    setTimeout(() => {
-      isInitialMount.current = false;
-    }, 0);
-  }, [gameNumber, allWords, targetWords]);
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "wordle", gameNumber);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
+        }
+      }
+
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const savedGame = localStorage.getItem(`wordle-game-${gameNumber}`);
+        if (savedGame) {
+          try {
+            stateToLoad = JSON.parse(savedGame);
+          } catch (e) {
+            console.error("Oyun verisi yüklenemedi:", e);
+          }
+        }
+      }
+
+      // 3. Apply state
+      if (stateToLoad) {
+        setGuesses(stateToLoad.guesses || []);
+        setGameState(
+          stateToLoad.gameWon ? "won" : stateToLoad.gameLost ? "lost" : "playing"
+        );
+        setCurrentGuess(stateToLoad.currentGuess || "");
+        setRevealedHints(stateToLoad.revealedHints || []); // Kaydedilmiş ipucuları yükle
+      }
+
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 0);
+    };
+
+    loadState();
+  }, [gameNumber, allWords, targetWords, backendUserId]);
 
   // Oyun durumunu kaydet
   useEffect(() => {
@@ -487,12 +508,27 @@ const Wordle = () => {
         currentGuess,
         revealedHints, // İpucu ile açılan harfleri kaydet
       };
-      localStorage.setItem(
-        `wordle-game-${gameNumber}`,
-        JSON.stringify(savedState)
-      );
+
+      // Always save to localStorage for ongoing games (as requested)
+      if (gameState === "playing") {
+        localStorage.setItem(`wordle-game-${gameNumber}`, JSON.stringify(savedState));
+      } else {
+        localStorage.removeItem(`wordle-game-${gameNumber}`);
+      }
+
+      // Save to Encore if logged in
+      if (backendUserId) {
+        saveGameState(
+          backendUserId,
+          "wordle",
+          gameNumber,
+          savedState as any,
+          gameState !== "playing",
+          gameState === "won"
+        );
+      }
     }
-  }, [gameNumber, guesses, gameState, currentGuess, targetWord, revealedHints]);
+  }, [gameNumber, guesses, gameState, currentGuess, targetWord, revealedHints, backendUserId]);
 
   const evaluateGuess = (guess: string): Letter[] => {
     const result: Letter[] = [];

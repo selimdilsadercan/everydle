@@ -27,7 +27,7 @@ import { useRouter } from "next/navigation";
 import { markGameCompleted, unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 import { getUserStars } from "@/lib/userStars";
 
 // Turkish common words (stop words)
@@ -241,6 +241,7 @@ const Redactle = () => {
   const [skips, setSkips] = useState(0);
   const [coins, setCoins] = useState(0);
   const [isHintMode, setIsHintMode] = useState(false);
+  const isInitialMount = useRef(true);
 
   // Memoized article rendering to prevent lag on every keystroke
   const renderedArticle = useMemo(() => {
@@ -836,49 +837,68 @@ const Redactle = () => {
 
   // Initialize game for selected date
   useEffect(() => {
-    const initializeGame = () => {
+    const initializeGame = async () => {
+      const dayNum = getDayNumber(selectedDate);
       const storageKey = getStorageKey(selectedDate);
-      const savedState = localStorage.getItem(storageKey);
-      
-      if (savedState) {
-        try {
-          const parsed = JSON.parse(savedState);
-          setGameState(parsed);
-          return;
-        } catch (e) {
-          console.error("Error parsing saved state:", e);
+      let stateToLoad = null;
+
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "redactle", dayNum);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
         }
       }
 
-      // New game for this date
-      const newState = {
-        urlTitle: `Redactle #${getDayNumber(selectedDate)}`,
-        guesses: {},
-        revealed: {},
-        solved: false,
-        guessDisplayNames: {},
-        guessOrder: [],
-        hintedWords: {},
-      };
-      setGameState(newState);
-      localStorage.setItem(storageKey, JSON.stringify(newState));
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const savedState = localStorage.getItem(storageKey);
+        if (savedState) {
+          try {
+            stateToLoad = JSON.parse(savedState);
+          } catch (e) {
+            console.error("Error parsing saved state:", e);
+          }
+        }
+      }
+      
+      if (stateToLoad) {
+        setGameState(stateToLoad);
+      } else {
+        // New game for this date
+        const newState = {
+          urlTitle: `Redactle #${dayNum}`,
+          guesses: {},
+          revealed: {},
+          solved: false,
+          guessDisplayNames: {},
+          guessOrder: [],
+          hintedWords: {},
+        };
+        setGameState(newState);
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+      }
+      
+      // Reset other states when date changes
+      setSelectedWord("");
+      setMessage("");
+      setSections([]);
+      setWordCount({});
+      setTokenLookup({});
+      setUndoStack([]);
+      setLastRevealed({});
+      setDebugRevealAll(false);
+      setLastScrollIndex({});
+      setRootToLemmas({});
+      setLemmaToRoot({});
+
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 0);
     };
 
-    // Reset all states when date changes
-    setSelectedWord("");
-    setMessage("");
-    setSections([]);
-    setWordCount({});
-    setTokenLookup({});
-    setUndoStack([]);
-    setLastRevealed({});
-    setDebugRevealAll(false);
-    setLastScrollIndex({});
-    setRootToLemmas({});
-    setLemmaToRoot({});
-
     initializeGame();
-  }, [selectedDate]);
+  }, [selectedDate, backendUserId]);
 
   // Load article when game state is ready
   useEffect(() => {
@@ -889,11 +909,31 @@ const Redactle = () => {
 
   // Save game state for current date
   useEffect(() => {
-    if (gameState) {
+    if (gameState && !isInitialMount.current) {
+      const dayNum = getDayNumber(selectedDate);
       const storageKey = getStorageKey(selectedDate);
-      localStorage.setItem(storageKey, JSON.stringify(gameState));
+      const isFinished = gameState.solved;
+
+      // Always save to localStorage for ongoing games (as requested)
+      if (!isFinished) {
+        localStorage.setItem(storageKey, JSON.stringify(gameState));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+
+      // Save to Encore if logged in
+      if (backendUserId) {
+        saveGameState(
+          backendUserId,
+          "redactle",
+          dayNum,
+          gameState as any,
+          isFinished,
+          isFinished
+        );
+      }
     }
-  }, [gameState, selectedDate]);
+  }, [gameState, selectedDate, backendUserId]);
 
   // Handle guess submission
   const handleGuess = (guessToUse?: string) => {

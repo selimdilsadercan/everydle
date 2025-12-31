@@ -21,7 +21,8 @@ import {
   UserMinus,
   Share2,
   Bell,
-  Lock
+  Lock,
+  MoreVertical
 } from "lucide-react";
 import { Diamond } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
@@ -75,6 +76,7 @@ export default function ProfilePage() {
   const [showCopyFeedback, setShowCopyFeedback] = useState(false);
   const [showFriendRemoveConfirm, setShowFriendRemoveConfirm] = useState(false);
   const [friendToRemove, setFriendToRemove] = useState<friendship.FriendUser | null>(null);
+  const [openMenuFriendId, setOpenMenuFriendId] = useState<string | null>(null);
 
   const { user, isAuthenticated, loading: authLoading, signOut } = useAuth();
   
@@ -552,7 +554,7 @@ export default function ProfilePage() {
             </div>
           ) : (
             friends.map((friend) => (
-              <div key={friend.id} className="p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors group">
+              <div key={friend.id} className="p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg relative">
                     {friend.avatar ? <img src={friend.avatar} className="w-full h-full rounded-full" /> : "👤"}
@@ -569,7 +571,7 @@ export default function ProfilePage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {/* Dostluk Savaşı Butonu */}
                   {backendUserId && backendUser?.username && (
                     <SendBattleButton
@@ -580,12 +582,40 @@ export default function ProfilePage() {
                       isOnline={friend.isOnline}
                     />
                   )}
-                  <button
-                    onClick={() => handleRemoveFriend(friend)}
-                    className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                  >
-                    <UserMinus className="w-4 h-4" />
-                  </button>
+                  {/* Üç Nokta Menüsü */}
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuFriendId(openMenuFriendId === friend.id ? null : friend.id);
+                      }}
+                      className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-all"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {/* Dropdown Menu */}
+                    {openMenuFriendId === friend.id && (
+                      <>
+                        {/* Overlay to close menu */}
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setOpenMenuFriendId(null)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20">
+                          <button
+                            onClick={() => {
+                              handleRemoveFriend(friend);
+                              setOpenMenuFriendId(null);
+                            }}
+                            className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10 rounded-xl flex items-center gap-2 transition-colors"
+                          >
+                            <UserMinus className="w-4 h-4" />
+                            Arkadaşlıktan Çıkar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))

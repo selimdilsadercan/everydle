@@ -56,7 +56,7 @@ export const ChestIcon = ({ status, milestone = 4, size = "md" }: ChestIconProps
       </svg>
       {status === "locked" && (
         <div className="absolute inset-0 flex items-center justify-center translate-y-1">
-          <Lock className={`${size === 'lg' ? 'w-6 h-6' : 'w-3.5 h-3.5'} text-slate-500`} />
+          <Lock className={`${size === 'lg' ? 'w-6 h-6' : 'w-4 h-4'} text-slate-400`} strokeWidth={2.5} />
         </div>
       )}
     </div>

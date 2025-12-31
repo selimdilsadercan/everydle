@@ -336,9 +336,13 @@ const Octordle = () => {
         );
       }
       
-      // LocalStorage'a da kaydet (yedek)
+      // LocalStorage'a kaydet (sadece devam eden oyunlar için)
       const dateStr = selectedDate || getTodayFormatted();
-      localStorage.setItem(`octordle-game-${dateStr}`, JSON.stringify(stateToSave));
+      if (allWon || allLost) {
+        localStorage.removeItem(`octordle-game-${dateStr}`);
+      } else {
+        localStorage.setItem(`octordle-game-${dateStr}`, JSON.stringify(stateToSave));
+      }
     }, 500);
     
     return () => {

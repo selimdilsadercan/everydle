@@ -461,21 +461,32 @@ function GamesContent() {
                 const isClaimed = claimedChests.includes(milestone);
                 const canClaim = completedGames.length >= milestone && !isClaimed;
                 const isLocked = completedGames.length < milestone;
+                const remaining = milestone - completedGames.length;
+                const isAlmostThere = remaining === 1 && !isClaimed; // 1 oyun kaldı!
 
                 return (
                   <button
                     key={milestone}
                     onClick={() => handleClaimChest(milestone)}
                     className={`
-                      relative group flex flex-col items-center gap-2 p-3 rounded-xl border transition-all duration-300
+                      relative group flex flex-col items-center gap-1 py-2 px-3 rounded-xl border transition-all duration-300
                       ${isClaimed 
                         ? 'bg-slate-900/40 border-slate-700/50' 
                         : canClaim
                           ? 'bg-emerald-500/10 border-emerald-500/50 scale-100 hover:scale-[1.02] active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                          : 'bg-slate-900/40 border-slate-700 text-slate-500'
+                          : isAlmostThere
+                            ? 'bg-amber-500/10 border-amber-500/40'
+                            : 'bg-slate-900/40 border-slate-700 text-slate-500'
                       }
                     `}
                   >
+                    {/* Az Kaldı Badge */}
+                    {isAlmostThere && (
+                      <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg z-10">
+                        1 Kaldı!
+                      </div>
+                    )}
+                    
                     <div className="transition-all duration-500">
                       <ChestIcon 
                         status={isClaimed ? "claimed" : (completedGames.length >= milestone) ? "ready" : "locked"} 
@@ -484,13 +495,23 @@ function GamesContent() {
                     </div>
                     
                     <div className="text-center">
-                      <p className={`text-[10px] font-bold uppercase tracking-wider ${isClaimed ? 'text-slate-500' : 'text-slate-300'}`}>
+                      <p className={`text-[10px] font-bold uppercase tracking-wider ${isClaimed ? 'text-slate-500' : isAlmostThere ? 'text-amber-400' : 'text-slate-300'}`}>
                         {milestone} Oyun
                       </p>
+                      {/* Progress indicator for locked chests */}
+                      {isLocked && !isAlmostThere && (
+                        <p className="text-[9px] text-slate-500 mt-0.5">
+                          {completedGames.length}/{milestone}
+                        </p>
+                      )}
                     </div>
 
                     {canClaim && (
                       <div className="absolute inset-0 rounded-xl bg-emerald-500/5 animate-pulse" />
+                    )}
+                    
+                    {isAlmostThere && (
+                      <div className="absolute inset-0 rounded-xl bg-amber-500/5 animate-pulse" />
                     )}
                   </button>
                 );

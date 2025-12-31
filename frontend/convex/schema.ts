@@ -51,6 +51,7 @@ export default defineSchema({
       guesses2: v.array(v.any()),
     })),
     round: v.optional(v.number()), // Mevcut round (1-indexed)
+    isFriendlyMatch: v.optional(v.boolean()), // Dostluk maçı mı? (Kupa etkilemez)
   })
     .index("by_odaId1", ["odaId1"])
     .index("by_odaId2", ["odaId2"])

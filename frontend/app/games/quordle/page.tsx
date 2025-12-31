@@ -11,7 +11,7 @@ import { triggerDataRefresh } from "@/components/Header";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
 
@@ -259,39 +259,81 @@ const Quordle = () => {
     triggerDataRefresh();
   };
 
-  // LocalStorage'dan yükle
+  // Oyun durumunu yükle
   useEffect(() => {
-    if (games.length === 0) return;
+    if (games.length === 0 || !gameDay) return;
 
-    const saved = localStorage.getItem("quordle-game");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.games && parsed.games.length === 4) {
-          setGames(parsed.games);
-          setCurrentGuess(parsed.currentGuess || "");
+    const loadState = async () => {
+      let stateToLoad = null;
+
+      // 1. Try Encore first if logged in
+      if (backendUserId) {
+        const response = await getEncoreGameState(backendUserId, "quordle", gameDay);
+        if (response.data?.success && response.data.data) {
+          stateToLoad = response.data.data.state as any;
         }
-      } catch (e) {
-        console.error("Oyun verisi yüklenemedi:", e);
       }
-    }
 
-    isInitialMount.current = false;
-  }, [games.length]);
+      // 2. Try LocalStorage if Encore failed or not logged in
+      if (!stateToLoad) {
+        const saved = localStorage.getItem("quordle-game");
+        if (saved) {
+          try {
+            stateToLoad = JSON.parse(saved);
+          } catch (e) {
+            console.error("Oyun verisi yüklenemedi:", e);
+          }
+        }
+      }
+
+      // 3. Apply state
+      if (stateToLoad && stateToLoad.games && stateToLoad.games.length === 4) {
+        setGames(stateToLoad.games);
+        setCurrentGuess(stateToLoad.currentGuess || "");
+        setRevealedHints(stateToLoad.revealedHints || [[], [], [], []]);
+      }
+      
+      isInitialMount.current = false;
+    };
+
+    loadState();
+  }, [games.length, gameDay, backendUserId]);
 
   // Oyun durumunu kaydet
   useEffect(() => {
-    if (isInitialMount.current || games.length === 0) {
-      isInitialMount.current = false;
+    if (isInitialMount.current || games.length === 0 || !gameDay) {
       return;
     }
 
-    const gameState = {
+    const allWon = games.every((g) => g.gameState === "won");
+    const allLost = games.every((g) => g.gameState === "lost");
+    const isFinished = allWon || allLost;
+
+    const stateToSave = {
       games,
       currentGuess,
+      revealedHints
     };
-    localStorage.setItem("quordle-game", JSON.stringify(gameState));
-  }, [games, currentGuess]);
+
+    // Always save to localStorage for ongoing games (as requested)
+    if (!isFinished) {
+      localStorage.setItem("quordle-game", JSON.stringify(stateToSave));
+    } else {
+      localStorage.removeItem("quordle-game");
+    }
+
+    // Save to Encore if logged in
+    if (backendUserId) {
+      saveGameState(
+        backendUserId,
+        "quordle",
+        gameDay,
+        stateToSave as any,
+        isFinished,
+        allWon
+      );
+    }
+  }, [games, currentGuess, revealedHints, gameDay, backendUserId]);
 
   // Oyun kazanıldığında levels modunda level'ı tamamla
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
