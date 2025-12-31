@@ -19,7 +19,7 @@ import { GamesPageSkeleton } from "@/components/SkeletonLoading";
 import { useAuth } from "@/contexts/AuthContext";
 import { claimChest as claimChestBackend } from "./actions";
 import { useQueryClient } from "@tanstack/react-query";
-import { QUERY_KEYS, useCompletedGamesForDate, useClaimedChests, GAMES_QUERY_KEYS } from "@/hooks/useProfileData";
+import { QUERY_KEYS, useCompletedGamesForDate, useClaimedChests, GAMES_QUERY_KEYS, useDailyProgressListener } from "@/hooks/useProfileData";
 
 // Game type
 interface Game {
@@ -161,6 +161,9 @@ function GamesContent() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   
   const queryClient = useQueryClient();
+  
+  // Listen for daily progress updates (e.g. when a game is completed)
+  useDailyProgressListener(backendUserId ?? undefined);
   
   // Seçilen tarihi string formatına çevir
   const selectedDateStr = selectedDate ? formatDate(selectedDate) : undefined;

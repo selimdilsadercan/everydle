@@ -250,6 +250,7 @@ export function useDailyProgressListener(userId: string | undefined) {
     
     const handleDailyProgressUpdate = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.dailyProgress(userId) });
+      queryClient.invalidateQueries({ queryKey: ["completedGamesForDate"] });
     };
     
     window.addEventListener("dailyProgressUpdate", handleDailyProgressUpdate);

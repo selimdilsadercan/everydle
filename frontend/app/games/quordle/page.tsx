@@ -67,6 +67,7 @@ const Quordle = () => {
   const [showPreviousGames, setShowPreviousGames] = useState(false);
   const [gameDay, setGameDay] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [levelCompleted, setLevelCompleted] = useState(false);
   const [shakeRow, setShakeRow] = useState(false);
   const [showInvalidWordToast, setShowInvalidWordToast] = useState(false);
@@ -103,6 +104,17 @@ const Quordle = () => {
   useEffect(() => {
     const loadWords = async () => {
       try {
+        const dateParam = searchParams.get("date"); // YYYY-MM-DD
+        let targetDateStr = getTodayFormatted();
+        
+        if (dateParam) {
+          const [y, m, d] = dateParam.split("-");
+          targetDateStr = `${d}.${m}.${y}`;
+          setSelectedDate(targetDateStr);
+        } else {
+          setSelectedDate(targetDateStr);
+        }
+
         // Tüm geçerli kelimeleri yükle (tahmin doğrulama için)
         const allResponse = await fetch("/wordle/all_5letters.txt");
         const allText = await allResponse.text();
@@ -119,17 +131,14 @@ const Quordle = () => {
         // Tüm günlük girişleri kaydet
         setDailyEntries(dailyData.daily_quordle);
         
-        // Bugünün tarihini DD.MM.YYYY formatında al
-        const todayFormatted = getTodayFormatted();
-        
-        // Bugünün kelimelerini bul
-        const todayEntry = dailyData.daily_quordle.find(
-          (entry: DailyEntry) => entry.date === todayFormatted
+        // Hedef kelimeleri bul
+        const targetEntry = dailyData.daily_quordle.find(
+          (entry: DailyEntry) => entry.date === targetDateStr
         );
         
-        if (todayEntry && todayEntry.words.length === 4) {
+        if (targetEntry && targetEntry.words.length === 4) {
           // Günlük 4 kelimeyi kullan
-          const selectedWords = todayEntry.words.map((w: string) => toTurkishUpperCase(w));
+          const selectedWords = targetEntry.words.map((w: string) => toTurkishUpperCase(w));
           
           const newGames: WordleGame[] = selectedWords.map((word: string) => ({
             targetWord: word,
@@ -141,7 +150,7 @@ const Quordle = () => {
           
           // Gün numarasını hesapla
           const dayIndex = dailyData.daily_quordle.findIndex(
-            (entry: DailyEntry) => entry.date === todayFormatted
+            (entry: DailyEntry) => entry.date === targetDateStr
           );
           setGameDay(dayIndex + 1);
         } else {
@@ -169,6 +178,8 @@ const Quordle = () => {
           });
         });
         setTargetWords(allTargetWords);
+
+        setIsLoaded(true);
       } catch (err) {
         console.error("Kelimeler yüklenemedi:", err);
         const fallback = ["KALEM", "KİTAP", "MASAJ", "KAPAK", "ELMAS", "BEBEK", "ÇİÇEK", "DOLAP"];
@@ -182,10 +193,11 @@ const Quordle = () => {
           gameState: "playing" as const,
         }));
         setGames(newGames);
+        setIsLoaded(true);
       }
     };
     loadWords();
-  }, []);
+  }, [searchParams]);
 
   // Joker ve coin değerlerini yükle
   useEffect(() => {
@@ -261,7 +273,8 @@ const Quordle = () => {
 
   // Oyun durumunu yükle
   useEffect(() => {
-    if (games.length === 0 || !gameDay) return;
+    // isLoaded eklendi, böylece oyun verisi yüklendikten sonra state kontrolü yapılır
+    if (!isLoaded || !gameDay) return;
 
     const loadState = async () => {
       let stateToLoad = null;
@@ -276,7 +289,9 @@ const Quordle = () => {
 
       // 2. Try LocalStorage if Encore failed or not logged in
       if (!stateToLoad) {
-        const saved = localStorage.getItem("quordle-game");
+        const dateStr = selectedDate || getTodayFormatted();
+        // Tarih bazlı local storage key kullan
+        const saved = localStorage.getItem(`quordle-game-${dateStr}`);
         if (saved) {
           try {
             stateToLoad = JSON.parse(saved);
@@ -297,11 +312,11 @@ const Quordle = () => {
     };
 
     loadState();
-  }, [games.length, gameDay, backendUserId]);
+  }, [gameDay, backendUserId, isLoaded, selectedDate]);
 
   // Oyun durumunu kaydet
   useEffect(() => {
-    if (isInitialMount.current || games.length === 0 || !gameDay) {
+    if (!isLoaded || games.length === 0 || !gameDay) {
       return;
     }
 
@@ -315,11 +330,12 @@ const Quordle = () => {
       revealedHints
     };
 
-    // Always save to localStorage for ongoing games (as requested)
+    // Save to localStorage with date key
+    const dateStr = selectedDate || getTodayFormatted();
     if (!isFinished) {
-      localStorage.setItem("quordle-game", JSON.stringify(stateToSave));
+      localStorage.setItem(`quordle-game-${dateStr}`, JSON.stringify(stateToSave));
     } else {
-      localStorage.removeItem("quordle-game");
+      localStorage.removeItem(`quordle-game-${dateStr}`);
     }
 
     // Save to Encore if logged in
@@ -333,7 +349,7 @@ const Quordle = () => {
         allWon
       );
     }
-  }, [games, currentGuess, revealedHints, gameDay, backendUserId]);
+  }, [games, currentGuess, revealedHints, gameDay, backendUserId, isLoaded, selectedDate]);
 
   // Oyun kazanıldığında levels modunda level'ı tamamla
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
@@ -367,6 +383,7 @@ const Quordle = () => {
       const completionDate = formatDate(new Date());
       markDailyGameCompleted(backendUserId, "quordle", gameDay, completionDate);
       setDailyCompleted(true);
+      triggerDataRefresh();
     }
   }, [games, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted]);
 
@@ -553,16 +570,22 @@ const Quordle = () => {
   };
 
   const resetGame = () => {
-    if (targetWords.length === 0) return;
-
-    const selectedWords: string[] = [];
-    const usedIndices = new Set<number>();
-
-    while (selectedWords.length < 4) {
-      const randomIndex = Math.floor(Math.random() * targetWords.length);
-      if (!usedIndices.has(randomIndex)) {
-        usedIndices.add(randomIndex);
-        selectedWords.push(targetWords[randomIndex]);
+    // Geçerli olan günün kelimelerini belirle
+    const dateStr = selectedDate || getTodayFormatted();
+    const entry = dailyEntries.find(e => e.date === dateStr);
+    
+    let selectedWords: string[] = [];
+    if (entry && entry.words.length === 4) {
+      selectedWords = entry.words.map(w => toTurkishUpperCase(w));
+    } else {
+      if (targetWords.length === 0) return;
+      const usedIndices = new Set<number>();
+      while (selectedWords.length < 4) {
+        const randomIndex = Math.floor(Math.random() * targetWords.length);
+        if (!usedIndices.has(randomIndex)) {
+          usedIndices.add(randomIndex);
+          selectedWords.push(targetWords[randomIndex]);
+        }
       }
     }
 
@@ -575,7 +598,7 @@ const Quordle = () => {
     setGames(newGames);
     setCurrentGuess("");
     setMessage("");
-    localStorage.removeItem("quordle-game");
+    localStorage.removeItem(`quordle-game-${dateStr}`);
   };
 
   if (games.length === 0 || allWords.length === 0) {
@@ -670,18 +693,10 @@ const Quordle = () => {
                       <button
                         key={entry.date}
                         onClick={() => {
-                          const selectedWords = entry.words.map(w => toTurkishUpperCase(w));
-                          const newGames: WordleGame[] = selectedWords.map((word: string) => ({
-                            targetWord: word,
-                            guesses: [],
-                            gameState: "playing" as const,
-                          }));
-                          setGames(newGames);
-                          setCurrentGuess("");
-                          setSelectedDate(entry.date);
-                          setGameDay(gameNumber);
+                          const [d, m, y] = entry.date.split('.');
+                          const isoDate = `${y}-${m}-${d}`;
+                          router.push(`/games/quordle?date=${isoDate}`);
                           setShowPreviousGames(false);
-                          localStorage.removeItem("quordle-game");
                         }}
                         className="w-full bg-slate-700 hover:bg-slate-600 rounded-lg p-4 transition-colors flex items-center justify-between group"
                       >
