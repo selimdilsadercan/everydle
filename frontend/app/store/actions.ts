@@ -172,16 +172,11 @@ export async function addGiveups(
  */
 export async function resetDailyReward(
   userId: string
-): Promise<ActionResponse<{ success: boolean; message?: string }>> {
+): Promise<ActionResponse<stars.ResetDailyRewardResponse>> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://staging-everydle-g6g3.encr.app";
-    const response = await fetch(`${baseUrl}/stars/daily/reset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
-    });
-    const data = await response.json();
-    return { data, error: null };
+    const client = createServerClient();
+    const response = await client.stars.resetDailyReward({ userId });
+    return { data: response, error: null };
   } catch (error) {
     console.error("Failed to reset daily reward:", error);
     return {

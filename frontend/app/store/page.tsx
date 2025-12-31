@@ -18,6 +18,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useUserByFirebaseId, useUserStats, useCanClaimReward, QUERY_KEYS } from "@/hooks/useProfileData";
 import { RewardModal, RewardData } from "@/components/RewardModal";
+import VideoAdModal from "@/components/VideoAdModal";
 
 export default function StorePage() {
   const [promoCode, setPromoCode] = useState("");
@@ -40,9 +41,11 @@ export default function StorePage() {
 
   // 3. Can Claim Reward
   const { data: claimInfo, isLoading: isRewardLoading } = useCanClaimReward(backendUserId);
-  const { canClaim, requiresVideo, claimsRemaining, claimsToday } = (claimInfo as any) || { canClaim: false, requiresVideo: false, claimsRemaining: 0, claimsToday: 0 };
+  const { canClaim, requiresVideo, claimsRemaining, claimsToday } = claimInfo || { canClaim: false, requiresVideo: false, claimsRemaining: 0, claimsToday: 0 };
 
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const videoRewardClaimPending = useRef(false);
 
   // Loading state
   const dataLoading = !!user?.uid && (isUserLoading || isStatsLoading || isRewardLoading);
@@ -83,12 +86,16 @@ export default function StorePage() {
     if (!canClaim || !backendUserId) return;
 
     if (requiresVideo) {
-      setIsVideoPlaying(true);
-      // Simulate video playing for 3 seconds
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      setIsVideoPlaying(false);
+      setShowVideoModal(true);
+      return; // Wait for onComplete from modal
     }
     
+    executeClaim();
+  };
+
+  const executeClaim = async () => {
+    if (!backendUserId) return;
+
     const result = await claimDailyReward(backendUserId);
     if (result.data?.success && result.data.reward) {
       // Set reward data and show modal
@@ -107,6 +114,10 @@ export default function StorePage() {
         animateCoinCount(coins, newCoins);
       }, 100);
     }
+  };
+
+  const handleVideoComplete = () => {
+    executeClaim();
   };
 
   // DEBUG: Reset daily reward
@@ -192,6 +203,13 @@ export default function StorePage() {
         show={showRewardModal}
         onClose={handleRewardModalClose}
         reward={rewardData}
+      />
+
+      {/* Video Ad Modal */}
+      <VideoAdModal
+        isOpen={showVideoModal}
+        onClose={() => setShowVideoModal(false)}
+        onComplete={handleVideoComplete}
       />
 
       {/* Main Content */}

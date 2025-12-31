@@ -1215,6 +1215,9 @@ export namespace stars {
         success: boolean
         canClaim?: boolean
         lastClaim?: string | null
+        claimsToday?: number
+        claimsRemaining?: number
+        requiresVideo?: boolean
         error?: string
     }
 
@@ -1227,6 +1230,8 @@ export namespace stars {
         data?: UserStars
         reward?: number
         newStreak?: number
+        claimsToday?: number
+        claimsRemaining?: number
         error?: string
     }
 
@@ -1247,12 +1252,23 @@ export namespace stars {
         error?: string
     }
 
+    export interface ResetDailyRewardRequest {
+        userId: string
+    }
+
+    export interface ResetDailyRewardResponse {
+        success: boolean
+        message?: string
+        error?: string
+    }
+
     export interface UserStars {
         id: string
         "user_id": string
         stars: number
         "last_daily_claim": string | null
         "daily_streak": number
+        "daily_claims_count": number
         "created_at": string
     }
 
@@ -1266,6 +1282,7 @@ export namespace stars {
             this.claimDailyReward = this.claimDailyReward.bind(this)
             this.getUserStars = this.getUserStars.bind(this)
             this.removeStars = this.removeStars.bind(this)
+            this.resetDailyReward = this.resetDailyReward.bind(this)
         }
 
         /**
@@ -1311,6 +1328,15 @@ export namespace stars {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/stars/remove`, JSON.stringify(params))
             return await resp.json() as RemoveStarsResponse
+        }
+
+        /**
+         * Reset daily reward (DEBUG ONLY)
+         */
+        public async resetDailyReward(params: ResetDailyRewardRequest): Promise<ResetDailyRewardResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/stars/daily/reset`, JSON.stringify(params))
+            return await resp.json() as ResetDailyRewardResponse
         }
     }
 }
