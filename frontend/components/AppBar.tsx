@@ -59,7 +59,10 @@ export default function AppBar({ currentPage }: AppBarProps) {
   const backendUserId = userResult?.data?.user?.id;
 
   // Get can claim reward from cache
-  const { data: hasReward = false } = useCanClaimReward(backendUserId);
+  // Get can claim reward from cache
+  const { data: rewardInfo } = useCanClaimReward(backendUserId);
+  // User wants badge to disappear after taking ONE reward (claimsToday > 0)
+  const hasReward = !!(rewardInfo?.canClaim && (rewardInfo?.claimsToday || 0) === 0);
 
   // Get daily progress from backend
   const { data: completedGames = [] } = useCompletedGamesForToday(backendUserId);

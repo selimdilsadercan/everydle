@@ -18,6 +18,7 @@ import {
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import HowToPlayModal from "./HowToPlayModal";
 import PreviousGamesModal from "./PreviousGamesModal";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 import { triggerDataRefresh } from "@/components/Header";
 import { completeLevel as completeLevelLocal, getCurrentLevel } from "@/lib/levelProgress";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
@@ -25,6 +26,8 @@ import { getUserStars } from "@/lib/userStars";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
 
@@ -169,34 +172,44 @@ const Wordle = () => {
   const [showInvalidWordToast, setShowInvalidWordToast] = useState(false);
   const [letterAnimationKeys, setLetterAnimationKeys] = useState<number[]>([0, 0, 0, 0, 0]);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
+  const [showConfirmSkip, setShowConfirmSkip] = useState(false);
   
-  // Joker ve coin state'leri
-  const [hints, setHints] = useState(0);
-  const [skips, setSkips] = useState(0);
-  const [coins, setCoins] = useState(0);
+  // Joker ve coin state'leri - Backend hook ile
+  const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localSkips, setLocalSkips] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
   const [revealedHints, setRevealedHints] = useState<number[]>([]); // Açılan harf pozisyonları
   
-  // Joker ve coin değerlerini yükle
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const skips = backendUserId ? backendSkips : localSkips;
+  const coins = backendUserId ? backendCoins : localCoins;
+  
+  // Joker ve coin değerlerini yükle (Local Storage fallback)
   useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+    
     const savedHints = localStorage.getItem("everydle-hints");
     const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setHints(parseInt(savedHints));
-    if (savedSkips) setSkips(parseInt(savedSkips));
-    setCoins(getUserStars());
+    if (savedHints) setLocalHints(parseInt(savedHints));
+    if (savedSkips) setLocalSkips(parseInt(savedSkips));
+    setLocalCoins(getUserStars());
     
     const handleStorageChange = () => {
       const h = localStorage.getItem("everydle-hints");
       const s = localStorage.getItem("everydle-giveups");
-      if (h) setHints(parseInt(h));
-      if (s) setSkips(parseInt(s));
-      setCoins(getUserStars());
+      if (h) setLocalHints(parseInt(h));
+      if (s) setLocalSkips(parseInt(s));
+      setLocalCoins(getUserStars());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [backendUserId]);
   
   // İpucu kullanma fonksiyonu
-  const handleUseHint = () => {
+  const handleUseHint = async () => {
     if (hints <= 0 || !targetWord || gameState !== "playing") return;
     
     // Önceki tahminlerde doğru bulunan pozisyonları bul
@@ -216,18 +229,29 @@ const Wordle = () => {
     
     if (unopenedPositions.length === 0) return; // Tüm harfler zaten açık veya bulunmuş
     
+    // Backend call for hints if logged in
+    if (backendUserId) {
+      const result = await useHint(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Hint kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
+      }
+      triggerDataRefresh();
+    } else {
+      // Local storage update
+      const newHintCount = localHints - 1;
+      localStorage.setItem("everydle-hints", newHintCount.toString());
+      setLocalHints(newHintCount);
+      triggerDataRefresh();
+    }
+    
     // Rastgele bir pozisyon seç
     const randomIndex = Math.floor(Math.random() * unopenedPositions.length);
     const positionToReveal = unopenedPositions[randomIndex];
     
     // Pozisyonu aç
     setRevealedHints(prev => [...prev, positionToReveal]);
-    
-    // Hint sayısını azalt
-    const newHintCount = hints - 1;
-    localStorage.setItem("everydle-hints", newHintCount.toString());
-    setHints(newHintCount);
-    triggerDataRefresh();
   };
 
   // Oyun numarası - mod'a göre belirle
@@ -509,12 +533,8 @@ const Wordle = () => {
         revealedHints, // İpucu ile açılan harfleri kaydet
       };
 
-      // Always save to localStorage for ongoing games (as requested)
-      if (gameState === "playing") {
-        localStorage.setItem(`wordle-game-${gameNumber}`, JSON.stringify(savedState));
-      } else {
-        localStorage.removeItem(`wordle-game-${gameNumber}`);
-      }
+      // Always save to localStorage regardless of game state
+      localStorage.setItem(`wordle-game-${gameNumber}`, JSON.stringify(savedState));
 
       // Save to Encore if logged in
       if (backendUserId) {
@@ -742,7 +762,7 @@ const Wordle = () => {
           {/* Top row: Back button | Title | Menu */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -885,7 +905,7 @@ const Wordle = () => {
             <div className="flex flex-col gap-2">
               {mode === "levels" ? (
                 <button
-                  onClick={() => router.back()}
+                  onClick={() => router.push('/games')}
                   className="px-6 py-2 rounded-md bg-emerald-600 text-sm font-semibold hover:bg-emerald-700 transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Map className="w-4 h-4" />
@@ -936,7 +956,7 @@ const Wordle = () => {
                       return (
                         <div
                           key={`hint-${col}`}
-                          className="flex-1 aspect-square bg-emerald-600 rounded flex items-center justify-center text-white text-2xl font-bold"
+                          className="flex-1 aspect-square bg-emerald-600 rounded flex items-center justify-center text-white text-2xl font-bold px-0.5"
                         >
                           {targetWord[col]}
                         </div>
@@ -1053,7 +1073,7 @@ const Wordle = () => {
               {/* Right: Joker Buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleUseHint}
+                  onClick={() => setShowConfirmHint(true)}
                   disabled={hints <= 0 || revealedHints.length >= 5}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     hints > 0 && revealedHints.length < 5
@@ -1098,6 +1118,18 @@ const Wordle = () => {
           onSelectGame={(selectedGameNumber) => {
             setGameNumber(selectedGameNumber);
           }}
+        />
+
+        {/* Joker Confirm Modal */}
+        <ConfirmJokerModal
+          isOpen={showConfirmHint}
+          type="hint"
+          remainingCount={hints}
+          onConfirm={() => {
+            setShowConfirmHint(false);
+            handleUseHint();
+          }}
+          onCancel={() => setShowConfirmHint(false)}
         />
       </div>
     </main>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Diamond, ArrowBigRight } from "lucide-react";
+import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Diamond, ArrowBigRight, Check } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { getUserStars } from "@/lib/userStars";
@@ -12,6 +12,9 @@ import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
 
@@ -73,13 +76,22 @@ const Quordle = () => {
   const [showInvalidWordToast, setShowInvalidWordToast] = useState(false);
   const [letterAnimationKeys, setLetterAnimationKeys] = useState<number[]>([0, 0, 0, 0, 0]);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
   
-  // Joker ve coin state'leri
-  const [hints, setHints] = useState(0);
-  const [skips, setSkips] = useState(0);
-  const [coins, setCoins] = useState(0);
+  // Joker ve coin state'leri - Backend hook ile
+  const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localSkips, setLocalSkips] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
   // Her grid için açılan hint pozisyonları: [[grid0 pozisyonları], [grid1], ...]
   const [revealedHints, setRevealedHints] = useState<number[][]>([[], [], [], []]);
+  // Quordle özel: Hangi pozisyon için hangi harfin joker olarak açıldığını tutar. { colIndex: "A" }
+  const [hintLetters, setHintLetters] = useState<Record<number, string>>({});
+  
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const skips = backendUserId ? backendSkips : localSkips;
+  const coins = backendUserId ? backendCoins : localCoins;
 
   const isInitialMount = useRef(true);
 
@@ -199,41 +211,40 @@ const Quordle = () => {
     loadWords();
   }, [searchParams]);
 
-  // Joker ve coin değerlerini yükle
+  // Joker ve coin değerlerini yükle (Local Storage fallback)
   useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+    
     const savedHints = localStorage.getItem("everydle-hints");
     const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setHints(parseInt(savedHints));
-    if (savedSkips) setSkips(parseInt(savedSkips));
-    setCoins(getUserStars());
+    if (savedHints) setLocalHints(parseInt(savedHints));
+    if (savedSkips) setLocalSkips(parseInt(savedSkips));
+    setLocalCoins(getUserStars());
     
     const handleStorageChange = () => {
       const h = localStorage.getItem("everydle-hints");
       const s = localStorage.getItem("everydle-giveups");
-      if (h) setHints(parseInt(h));
-      if (s) setSkips(parseInt(s));
-      setCoins(getUserStars());
+      if (h) setLocalHints(parseInt(h));
+      if (s) setLocalSkips(parseInt(s));
+      setLocalCoins(getUserStars());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [backendUserId]);
   
   // İpucu kullanma fonksiyonu
-  const handleUseHint = () => {
+  const handleUseHint = async () => {
     if (hints <= 0 || games.length === 0) return;
     
-    // Hala oynanan (kazanılmamış) grid'leri bul
+    // 1. Oynanan gridleri bul
     const playingGrids = games
       .map((game, idx) => ({ game, idx }))
       .filter(({ game }) => game.gameState === "playing");
     
     if (playingGrids.length === 0) return;
-    
-    // Her oynan grid için açılabilecek pozisyonları bul
-    const availableHints: { gridIndex: number; position: number }[] = [];
-    
-    playingGrids.forEach(({ game, idx }) => {
-      // Önceki tahminlerde doğru bulunan pozisyonları bul
+
+    // 2. Her playing grid için müsait pozisyonları bul
+    const gridAvailablePositions: number[][] = playingGrids.map(({ game, idx }) => {
       const correctPositions: number[] = [];
       game.guesses.forEach(guess => {
         guess.forEach((letter, pos) => {
@@ -243,33 +254,98 @@ const Quordle = () => {
         });
       });
       
-      // Bu grid için açılmamış VE doğru bulunmamış pozisyonlar
-      const gridHints = revealedHints[idx] || [];
-      for (let pos = 0; pos < 5; pos++) {
-        if (!gridHints.includes(pos) && !correctPositions.includes(pos)) {
-          availableHints.push({ gridIndex: idx, position: pos });
-        }
+      const gridRevealed = revealedHints[idx] || [];
+      return [0, 1, 2, 3, 4].filter(pos => 
+        !correctPositions.includes(pos) && !gridRevealed.includes(pos)
+      );
+    });
+
+    // 3. Ortak müsait pozisyonları bul
+    let candidatePositions: number[] = [];
+    
+    // İlk olarak tüm playing gridlerde ortak olan pozisyonlara bak
+    let commonAvailable = gridAvailablePositions[0] || [];
+    for (let i = 1; i < gridAvailablePositions.length; i++) {
+        commonAvailable = commonAvailable.filter(pos => gridAvailablePositions[i].includes(pos));
+    }
+    
+    if (commonAvailable.length > 0) {
+      candidatePositions = commonAvailable;
+    } else {
+      // Ortak yoksa, tüm müsait pozisyonların birleşimini al
+      candidatePositions = Array.from(new Set(gridAvailablePositions.flat()));
+    }
+
+    if (candidatePositions.length === 0) return; // Açılacak yer kalmadı
+
+    // 4. Backend/LocalStorage işlemleri
+    if (backendUserId) {
+      const result = await useHint(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Hint kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
       }
+      triggerDataRefresh();
+    } else {
+      const newHintCount = localHints - 1;
+      localStorage.setItem("everydle-hints", newHintCount.toString());
+      setLocalHints(newHintCount);
+      triggerDataRefresh();
+    }
+
+    // 5. Rastgele bir pozisyon seç ve tüm playing gridlerde aç
+    const targetPosition = candidatePositions[Math.floor(Math.random() * candidatePositions.length)];
+
+    // Bu pozisyondaki HARFİ belirle (Rastgele bir playing gridin o pozisyondaki harfi)
+    // Böylece en az bir gridde 'Yeşil' (Correct) yanması garanti olur.
+    // Ancak o gridin o pozisyonu "available" (henüz bilinmeyen) olmalı.
+    // candidatePositions zaten available'lardan seçildi, ama selected gridin o pozisyonu available olmayabilir mi?
+    // candidatePositions "commonAvailable" ise tüm gridlerde available.
+    // Değilse, available olduğu gridlerden birini seçmek daha doğru olur.
+    
+    let sourceGrid = playingGrids[0];
+    
+    // Eğer seçilen pozisyon "commonAvailable" içindeyse, herhangi bir playing grid kaynak olabilir.
+    // Değilse, bu pozisyonun müsait olduğu gridlerden birini kaynak olarak seç.
+    const gridsWherePosIsAvailable = playingGrids.filter(({ idx }) => {
+        const gridRevealed = revealedHints[idx] || [];
+        // Correct check'i tekrar yapmaya gerek var mı? available listesi zaten filtrlendi.
+        // Ama basitçe o gridin available listesinde bu pozisyon var mı diye bakabiliriz.
+        // Ama available listesi local scope'da kaldı.
+        // Neyse, basitçe: O gridde bu pozisyon henüz açılmamışsa kaynak olabilir.
+        return !gridRevealed.includes(targetPosition);
     });
     
-    if (availableHints.length === 0) return;
+    if (gridsWherePosIsAvailable.length > 0) {
+        sourceGrid = gridsWherePosIsAvailable[Math.floor(Math.random() * gridsWherePosIsAvailable.length)];
+    }
     
-    // Rastgele bir hint seç
-    const randomHint = availableHints[Math.floor(Math.random() * availableHints.length)];
-    
-    // Pozisyonu aç
+    const targetLetter = sourceGrid.game.targetWord[targetPosition];
+
+    // Hint harfini kaydet
+    setHintLetters(prev => ({
+        ...prev,
+        [targetPosition]: targetLetter
+    }));
+
     setRevealedHints(prev => {
       const newHints = [...prev];
-      newHints[randomHint.gridIndex] = [...newHints[randomHint.gridIndex], randomHint.position];
+      // Tüm playing gridler için o pozisyonu aç
+      playingGrids.forEach(({ idx }) => {
+        const currentGridHints = newHints[idx] || [];
+        if (!currentGridHints.includes(targetPosition)) {
+            // Eğer oyun durumu 'playing' ise ve o pozisyon henüz açılmamışsa ekle
+            newHints[idx] = [...currentGridHints, targetPosition];
+        }
+      });
       return newHints;
     });
     
-    // Hint sayısını azalt
-    const newHintCount = hints - 1;
-    localStorage.setItem("everydle-hints", newHintCount.toString());
-    setHints(newHintCount);
-    triggerDataRefresh();
+    // Input'u temizle ki writablePositions hesaplaması karışmasın
+    setCurrentGuess("");
   };
+
 
   // Oyun durumunu yükle
   useEffect(() => {
@@ -306,6 +382,7 @@ const Quordle = () => {
         setGames(stateToLoad.games);
         setCurrentGuess(stateToLoad.currentGuess || "");
         setRevealedHints(stateToLoad.revealedHints || [[], [], [], []]);
+        setHintLetters(stateToLoad.hintLetters || {});
       }
       
       isInitialMount.current = false;
@@ -327,16 +404,14 @@ const Quordle = () => {
     const stateToSave = {
       games,
       currentGuess,
-      revealedHints
+      revealedHints,
+      hintLetters
     };
 
     // Save to localStorage with date key
     const dateStr = selectedDate || getTodayFormatted();
-    if (!isFinished) {
-      localStorage.setItem(`quordle-game-${dateStr}`, JSON.stringify(stateToSave));
-    } else {
-      localStorage.removeItem(`quordle-game-${dateStr}`);
-    }
+    // Always save to localStorage regardless of game state
+    localStorage.setItem(`quordle-game-${dateStr}`, JSON.stringify(stateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -437,18 +512,34 @@ const Quordle = () => {
       const allLost = games.every((g) => g.gameState === "lost");
       if (allWon || allLost) return;
 
+      // Yazılabilir pozisyonları bul (hintLetters olmayanlar)
+      const writablePositions = [0, 1, 2, 3, 4].filter(pos => !hintLetters[pos]);
+      const maxInputLength = writablePositions.length;
+
       if (key === "Enter") {
-        if (currentGuess.length === 5) {
-          if (allWords.includes(currentGuess)) {
+        if (currentGuess.length === maxInputLength) {
+          // Full guess oluştur (Hint harfleri + Kullanıcı girdisi)
+          let fullGuess = "";
+          let userIdx = 0;
+          for (let i = 0; i < 5; i++) {
+             if (hintLetters[i]) {
+                 fullGuess += hintLetters[i];
+             } else {
+                 fullGuess += currentGuess[userIdx] || "";
+                 userIdx++;
+             }
+          }
+
+          if (allWords.includes(fullGuess)) {
             setGames((prevGames) => {
               const newGames = prevGames.map((game) => {
                 if (game.gameState !== "playing") return game;
 
-                const evaluated = evaluateGuess(currentGuess, game.targetWord);
+                const evaluated = evaluateGuess(fullGuess, game.targetWord);
                 const newGuesses = [...game.guesses, evaluated];
 
                 let newState: "playing" | "won" | "lost" = "playing";
-                if (currentGuess === game.targetWord) {
+                if (fullGuess === game.targetWord) {
                   newState = "won";
                 } else if (newGuesses.length >= 9) {
                   newState = "lost";
@@ -465,6 +556,9 @@ const Quordle = () => {
             });
 
             setCurrentGuess("");
+            // Hintleri temizle - böylece bir sonraki satıra "kaymazlar"
+            setHintLetters({});
+            setRevealedHints([[], [], [], []]);
             setMessage("");
           } else {
             // Shake animasyonu ve toast göster
@@ -476,8 +570,11 @@ const Quordle = () => {
         }
       } else if (key === "Backspace") {
         if (currentGuess.length > 0) {
-          const deleteIdx = currentGuess.length - 1;
-          setDeletingIndex(deleteIdx);
+          // Silinen harfin GERÇEK grid üzerindeki pozisyonunu bul (animasyon için)
+          const deletedUserCharIndex = currentGuess.length - 1;
+          const realGridIndex = writablePositions[deletedUserCharIndex];
+          
+          setDeletingIndex(realGridIndex);
           setTimeout(() => {
             setDeletingIndex(null);
             setCurrentGuess(prev => prev.slice(0, -1));
@@ -486,7 +583,7 @@ const Quordle = () => {
       } else if (
         key.length === 1 &&
         /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(key) &&
-        currentGuess.length < 5
+        currentGuess.length < maxInputLength
       ) {
         // Türkçe karakterleri doğru şekilde büyük harfe çevir
         let upperKey = key;
@@ -500,17 +597,20 @@ const Quordle = () => {
         else upperKey = key.toUpperCase();
 
         // Pop animasyonu için harfin key'ini güncelle
-        const newIndex = currentGuess.length;
+        // Eklenen harfin gerçek grid pozisyonunu bul
+        const newUserCharIndex = currentGuess.length;
+        const realGridIndex = writablePositions[newUserCharIndex];
+        
         setLetterAnimationKeys(prev => {
           const newKeys = [...prev];
-          newKeys[newIndex] = (prev[newIndex] || 0) + 1;
+          newKeys[realGridIndex] = (prev[realGridIndex] || 0) + 1;
           return newKeys;
         });
 
-        setCurrentGuess((prev) => (prev + upperKey).slice(0, 5));
+        setCurrentGuess((prev) => (prev + upperKey));
       }
     },
-    [currentGuess, games, allWords]
+    [currentGuess, games, allWords, hintLetters]
   );
 
   useEffect(() => {
@@ -597,6 +697,8 @@ const Quordle = () => {
 
     setGames(newGames);
     setCurrentGuess("");
+    setRevealedHints([[], [], [], []]);
+    setHintLetters({});
     setMessage("");
     localStorage.removeItem(`quordle-game-${dateStr}`);
   };
@@ -689,6 +791,24 @@ const Quordle = () => {
                     const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
                     const dayName = isToday ? "Bugün" : `${parseInt(dateParts[0])} ${monthNames[parseInt(dateParts[1]) - 1]}`;
                     
+                    const savedStr = typeof window !== 'undefined' ? localStorage.getItem(`quordle-game-${entry.date}`) : null;
+                    let status: "won" | "lost" | "playing" | "not_played" = "not_played";
+                    
+                    if (savedStr) {
+                        try {
+                            const savedData = JSON.parse(savedStr);
+                            if (savedData.games && Array.isArray(savedData.games)) {
+                                const gms = savedData.games;
+                                const allWon = gms.every((g: any) => g.gameState === "won");
+                                const anyPlaying = gms.some((g: any) => g.gameState === "playing");
+                                
+                                if (allWon) status = "won";
+                                else if (anyPlaying) status = "playing";
+                                else status = "lost";
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+
                     return (
                       <button
                         key={entry.date}
@@ -703,13 +823,30 @@ const Quordle = () => {
                         <div className="flex items-center gap-4">
                           {/* Status Icon */}
                           <div className="w-8 h-8 flex items-center justify-center">
-                            <div className="w-6 h-6 rounded-full border-2 border-slate-500" />
+                            {status === "won" && (
+                                <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-slate-900">
+                                    <Check className="w-4 h-4" />
+                                </div>
+                            )}
+                            {status === "lost" && (
+                                <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white">
+                                    <X className="w-4 h-4" />
+                                </div>
+                            )}
+                            {status === "playing" && (
+                                <div className="w-6 h-6 rounded-full border-2 border-yellow-500 flex items-center justify-center text-yellow-500">
+                                    <span className="text-xs font-bold">...</span>
+                                </div>
+                            )}
+                            {status === "not_played" && (
+                                <div className="w-6 h-6 rounded-full border-2 border-slate-500" />
+                            )}
                           </div>
 
                           {/* Game Info */}
                           <div className="text-left">
                             <div className="flex items-center gap-3">
-                              <span className="text-lg font-bold text-emerald-400">
+                              <span className={`text-lg font-bold ${status === 'won' ? 'text-emerald-400' : status === 'lost' ? 'text-red-400' : status === 'playing' ? 'text-yellow-400' : 'text-slate-400'}`}>
                                 #{gameNumber}
                               </span>
                               <span className="text-sm text-slate-400">
@@ -721,7 +858,10 @@ const Quordle = () => {
 
                         {/* Status Text */}
                         <div className="text-sm font-semibold">
-                          <span className="text-slate-500">Oynanmadı</span>
+                          {status === "won" && <span className="text-emerald-400">Kazanıldı</span>}
+                          {status === "lost" && <span className="text-red-400">Kaybedildi</span>}
+                          {status === "playing" && <span className="text-yellow-400">Devam Ediyor</span>}
+                          {status === "not_played" && <span className="text-slate-500">Oynanmadı</span>}
                         </div>
                       </button>
                     );
@@ -734,7 +874,7 @@ const Quordle = () => {
         <header className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -910,10 +1050,33 @@ const Quordle = () => {
                             // Hint harfi bu pozisyonda açık mı?
                             const gridHints = revealedHints[gameIndex] || [];
                             const isHintPosition = gridHints.includes(col);
-                            const hintLetter = isHintPosition ? game.targetWord[col] : null;
                             
-                            // Kullanıcının yazdığı harf (bu pozisyondaki)
-                            const userLetter = currentGuess[col] || "";
+                            let hintLetter = null;
+                            let hintColorClass = "";
+                            
+                            if (isHintPosition) {
+                                // Global zorlanan harf varsa onu, yoksa hedef kelimede o pozisyonu kullan
+                                const globalHintLetter = hintLetters[col];
+                                hintLetter = globalHintLetter || game.targetWord[col];
+                                
+                                // Rengi hesapla
+                                if (hintLetter === game.targetWord[col]) {
+                                    hintColorClass = "bg-emerald-900 border-1 border-emerald-500 text-emerald-100";
+                                } else if (game.targetWord.includes(hintLetter)) {
+                                    hintColorClass = "bg-yellow-900 border-1 border-yellow-500 text-yellow-100";
+                                } else {
+                                    hintColorClass = "bg-slate-800 border-1 border-slate-500 text-slate-400";
+                                }
+                            }
+                            
+                            // Kullanıcının yazdığı harf (bu pozisyondaki - writable mapping)
+                            const writablePositions = [0, 1, 2, 3, 4].filter(pos => !hintLetters[pos]);
+                            const writableIndex = writablePositions.indexOf(col);
+                            let userLetter = "";
+                            
+                            if (writableIndex !== -1) {
+                                userLetter = currentGuess[writableIndex] || "";
+                            }
                             // Kullanıcı yazmışsa kullanıcının harfini göster, yoksa hint harfini
                             const displayLetter = userLetter || hintLetter || "";
                             const isDeleting = col === deletingIndex;
@@ -925,7 +1088,7 @@ const Quordle = () => {
                                 key={`${col}-${letterAnimationKeys[col]}`}
                                 className={`flex-1 aspect-square rounded flex items-center justify-center text-white text-[11px] font-bold ${
                                   showAsHint 
-                                    ? "bg-yellow-600 border-2 border-yellow-400" 
+                                    ? hintColorClass
                                     : "bg-slate-700 border border-slate-600"
                                 } ${
                                   isDeleting ? "animate-letter-shrink" : displayLetter ? "animate-letter-pop" : ""
@@ -1036,7 +1199,7 @@ const Quordle = () => {
               {/* Right: Joker Buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleUseHint}
+                  onClick={() => setShowConfirmHint(true)}
                   disabled={hints <= 0}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     hints > 0
@@ -1068,6 +1231,18 @@ const Quordle = () => {
         
         {/* Bottom Spacer for Fixed Joker Bar */}
         {games.some(g => g.gameState === "playing") && <div className="h-16" />}
+
+        {/* Joker Confirm Modal */}
+        <ConfirmJokerModal
+          isOpen={showConfirmHint}
+          type="hint"
+          remainingCount={hints}
+          onConfirm={() => {
+            setShowConfirmHint(false);
+            handleUseHint();
+          }}
+          onCancel={() => setShowConfirmHint(false)}
+        />
       </div>
     </main>
   );

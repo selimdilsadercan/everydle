@@ -12,6 +12,9 @@ import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 interface DailyEquation {
   date: string;
@@ -73,34 +76,43 @@ const Nerdle = () => {
   const [gameDay, setGameDay] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
 
-  // Joker ve coin state'leri
-  const [hints, setHints] = useState(0);
-  const [skips, setSkips] = useState(0);
-  const [coins, setCoins] = useState(0);
+  // Joker ve coin state'leri - Backend hook ile
+  const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localSkips, setLocalSkips] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
   const [revealedHints, setRevealedHints] = useState<number[]>([]); // Açılan karakter pozisyonları
+  
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const skips = backendUserId ? backendSkips : localSkips;
+  const coins = backendUserId ? backendCoins : localCoins;
 
-  // Joker ve coin değerlerini yükle
+  // Joker ve coin değerlerini yükle (Local Storage fallback)
   useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+    
     const savedHints = localStorage.getItem("everydle-hints");
     const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setHints(parseInt(savedHints));
-    if (savedSkips) setSkips(parseInt(savedSkips));
-    setCoins(getUserStars());
+    if (savedHints) setLocalHints(parseInt(savedHints));
+    if (savedSkips) setLocalSkips(parseInt(savedSkips));
+    setLocalCoins(getUserStars());
     
     const handleStorageChange = () => {
       const h = localStorage.getItem("everydle-hints");
       const s = localStorage.getItem("everydle-giveups");
-      if (h) setHints(parseInt(h));
-      if (s) setSkips(parseInt(s));
-      setCoins(getUserStars());
+      if (h) setLocalHints(parseInt(h));
+      if (s) setLocalSkips(parseInt(s));
+      setLocalCoins(getUserStars());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [backendUserId]);
 
   // İpucu kullanma fonksiyonu
-  const handleUseHint = () => {
+  const handleUseHint = async () => {
     if (hints <= 0 || !targetEquation || gameState !== "playing") return;
     
     // Önceki tahminlerde doğru bulunan pozisyonları bul
@@ -120,18 +132,29 @@ const Nerdle = () => {
     
     if (unopenedPositions.length === 0) return; // Tüm karakterler zaten açık veya bulunmuş
     
+    // Backend call for hints if logged in
+    if (backendUserId) {
+      const result = await useHint(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Hint kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
+      }
+      triggerDataRefresh();
+    } else {
+      // Local storage update
+      const newHintCount = localHints - 1;
+      localStorage.setItem("everydle-hints", newHintCount.toString());
+      setLocalHints(newHintCount);
+      triggerDataRefresh();
+    }
+    
     // Rastgele bir pozisyon seç
     const randomIndex = Math.floor(Math.random() * unopenedPositions.length);
     const positionToReveal = unopenedPositions[randomIndex];
     
     // Pozisyonu aç
     setRevealedHints(prev => [...prev, positionToReveal]);
-    
-    // Hint sayısını azalt
-    const newHintCount = hints - 1;
-    localStorage.setItem("everydle-hints", newHintCount.toString());
-    setHints(newHintCount);
-    triggerDataRefresh();
   };
 
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
@@ -263,12 +286,8 @@ const Nerdle = () => {
       revealedHints
     };
 
-    // Always save to localStorage for ongoing games (as requested)
-    if (!isFinished) {
-      localStorage.setItem(`nerdle-game-${gameDay}`, JSON.stringify(stateToSave));
-    } else {
-      localStorage.removeItem(`nerdle-game-${gameDay}`);
-    }
+    // Always save to localStorage regardless of game state
+    localStorage.setItem(`nerdle-game-${gameDay}`, JSON.stringify(stateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -614,7 +633,7 @@ const Nerdle = () => {
           {/* Top row: Back button | Title | Menu */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -866,7 +885,7 @@ const Nerdle = () => {
             {/* Right: Joker Buttons */}
             <div className="flex items-center gap-2">
               <button
-                onClick={handleUseHint}
+                onClick={() => setShowConfirmHint(true)}
                 disabled={hints <= 0}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   hints > 0
@@ -898,6 +917,18 @@ const Nerdle = () => {
 
       {/* Bottom Spacer for Fixed Joker Bar */}
       {gameState === "playing" && <div className="h-16" />}
+
+      {/* Joker Confirm Modal */}
+      <ConfirmJokerModal
+        isOpen={showConfirmHint}
+        type="hint"
+        remainingCount={hints}
+        onConfirm={() => {
+          setShowConfirmHint(false);
+          handleUseHint();
+        }}
+        onCancel={() => setShowConfirmHint(false)}
+      />
     </main>
   );
 };

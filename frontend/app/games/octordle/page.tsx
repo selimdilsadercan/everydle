@@ -10,6 +10,10 @@ import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, unmarkDailyGameCompleted as unmarkDailyGameCompletedBackend, getAllCompletedGames, getGameState, saveGameState, deleteGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
+import { LightBulbIcon } from "@heroicons/react/24/solid";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
 
@@ -71,7 +75,15 @@ const Octordle = () => {
   const [showInvalidWordToast, setShowInvalidWordToast] = useState(false);
   const [letterAnimationKeys, setLetterAnimationKeys] = useState<number[]>([0, 0, 0, 0, 0]);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+
   const [completedDates, setCompletedDates] = useState<string[]>([]);
+
+  // Joker states
+  const { hints, stars, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
+  // 8 grids for Octordle
+  const [revealedHints, setRevealedHints] = useState<number[][]>([[], [], [], [], [], [], [], []]);
+  const [hintLetters, setHintLetters] = useState<Record<number, string>>({});
 
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
@@ -352,6 +364,81 @@ const Octordle = () => {
     };
   }, [games, currentGuess, selectedDate, isLoaded, backendUserId, gameDay]);
 
+  // --- JOKER LOGIC ---
+  const handleUseHint = async () => {
+    // 1. Check if user has hints
+    if (hints <= 0) return;
+
+    // 2. Consume hint via backend
+    const success = await useHint(backendUserId || "guest");
+    if (!success) return;
+
+    // 3. Find target position
+    // Identify active games
+    const playingGrids = games
+        .map((g, idx) => ({ g, idx }))
+        .filter(({ g }) => g.gameState === "playing");
+
+    if (playingGrids.length === 0) return;
+
+    // Aday pozisyonları belirle (Tüm gridlerde ortak açık olanlar)
+    const availabilityCounts = [0, 0, 0, 0, 0];
+    const availableInWhichGrids: number[][] = [[], [], [], [], []];
+
+    playingGrids.forEach(({ g, idx }) => {
+        // Bu grid için hangi pozisyonlar müsait?
+        const gridHints = revealedHints[idx] || [];
+        for (let i = 0; i < 5; i++) {
+            if (!gridHints.includes(i)) {
+                availabilityCounts[i]++;
+                availableInWhichGrids[i].push(idx);
+            }
+        }
+    });
+
+    // En çok ortak olan pozisyonu bul
+    const maxAvailability = Math.max(...availabilityCounts);
+    
+    let candidatePositions: number[] = [];
+    if (maxAvailability > 0) {
+        for(let i=0; i<5; i++) {
+            if(availabilityCounts[i] === maxAvailability) candidatePositions.push(i);
+        }
+    } else {
+        return; 
+    }
+
+    // Rastgele bir pozisyon seç
+    const targetPosition = candidatePositions[Math.floor(Math.random() * candidatePositions.length)];
+    
+    // 4. Determine THE letter
+    // Bu pozisyonun "available" olduğu gridlerden birini kaynak olarak seç
+    const sourceGridIdx = availableInWhichGrids[targetPosition][Math.floor(Math.random() * availableInWhichGrids[targetPosition].length)];
+    const sourceGame = games[sourceGridIdx];
+    const targetLetter = sourceGame.targetWord[targetPosition];
+
+    // 5. Update Global Hint Letters
+    setHintLetters(prev => ({
+        ...prev,
+        [targetPosition]: targetLetter
+    }));
+
+    // 6. Reveal this position in ALL playing grids
+    setRevealedHints(prev => {
+        const newHints = [...prev];
+        playingGrids.forEach(({ idx }) => {
+             const currentGridHints = newHints[idx] || [];
+             if (!currentGridHints.includes(targetPosition)) {
+                 newHints[idx] = [...currentGridHints, targetPosition];
+             }
+        });
+        return newHints;
+    });
+
+    // 7. Clear Input
+    setCurrentGuess("");
+  };
+
   const evaluateGuess = (guess: string, targetWord: string): Letter[] => {
     const result: Letter[] = [];
     const targetArray = targetWord.split("");
@@ -393,18 +480,37 @@ const Octordle = () => {
       const allLost = games.every((g) => g.gameState === "lost");
       if (allWon || allLost) return;
 
+      // Determine writable positions (not hinted)
+      const writablePositions: number[] = [];
+      for(let i=0; i<5; i++) {
+        if (!hintLetters[i]) writablePositions.push(i);
+      }
+      const maxInputLength = writablePositions.length;
+
       if (key === "Enter") {
-        if (currentGuess.length === 5) {
-          if (allWords.includes(currentGuess)) {
+        if (currentGuess.length === maxInputLength) {
+          // Construct full guess merging hints and user input
+          let fullGuess = "";
+          let userParamsIndex = 0;
+          for(let i=0; i<5; i++) {
+            if(hintLetters[i]) {
+                fullGuess += hintLetters[i];
+            } else {
+                fullGuess += currentGuess[userParamsIndex] || "";
+                userParamsIndex++;
+            }
+          }
+
+          if (allWords.includes(fullGuess)) {
             setGames((prevGames) => {
               const newGames = prevGames.map((game) => {
                 if (game.gameState !== "playing") return game;
 
-                const evaluated = evaluateGuess(currentGuess, game.targetWord);
+                const evaluated = evaluateGuess(fullGuess, game.targetWord);
                 const newGuesses = [...game.guesses, evaluated];
 
                 let newState: "playing" | "won" | "lost" = "playing";
-                if (currentGuess === game.targetWord) {
+                if (fullGuess === game.targetWord) {
                   newState = "won";
                 } else if (newGuesses.length >= 13) {
                   newState = "lost";
@@ -421,6 +527,9 @@ const Octordle = () => {
             });
 
             setCurrentGuess("");
+            // Reset hints after successful guess
+            setHintLetters({});
+            setRevealedHints([[], [], [], [], [], [], [], []]);
             setMessage("");
           } else {
             // Shake animasyonu ve toast göster
@@ -432,7 +541,7 @@ const Octordle = () => {
         }
       } else if (key === "Backspace") {
         if (currentGuess.length > 0) {
-          const deleteIdx = currentGuess.length - 1;
+          const deleteIdx = writablePositions[currentGuess.length - 1];
           setDeletingIndex(deleteIdx);
           setTimeout(() => {
             setDeletingIndex(null);
@@ -442,7 +551,7 @@ const Octordle = () => {
       } else if (
         key.length === 1 &&
         /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(key) &&
-        currentGuess.length < 5
+        currentGuess.length < maxInputLength
       ) {
         // Türkçe karakterleri doğru şekilde büyük harfe çevir
         let upperKey = key;
@@ -457,16 +566,18 @@ const Octordle = () => {
 
         // Pop animasyonu için harfin key'ini güncelle
         const newIndex = currentGuess.length;
+        const targetIndex = writablePositions[newIndex];
+        
         setLetterAnimationKeys(prev => {
           const newKeys = [...prev];
-          newKeys[newIndex] = (prev[newIndex] || 0) + 1;
+          newKeys[targetIndex] = (prev[targetIndex] || 0) + 1;
           return newKeys;
         });
 
-        setCurrentGuess((prev) => (prev + upperKey).slice(0, 5));
+        setCurrentGuess((prev) => (prev + upperKey).slice(0, maxInputLength));
       }
     },
-    [currentGuess, games, allWords]
+    [currentGuess, games, allWords, hintLetters]
   );
 
   useEffect(() => {
@@ -555,6 +666,8 @@ const Octordle = () => {
     setGames(newGames);
     setCurrentGuess("");
     setMessage("");
+    setRevealedHints([[], [], [], [], [], [], [], []]);
+    setHintLetters({});
     setDailyCompleted(false);
     localStorage.removeItem(`octordle-game-${dateStr}`);
 
@@ -719,7 +832,7 @@ const Octordle = () => {
         <header className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -728,6 +841,19 @@ const Octordle = () => {
             <h1 className="text-2xl font-bold">OCTORDLE</h1>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowConfirmHint(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors border ${
+                    hints > 0 
+                    ? "bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border-yellow-500/30" 
+                    : "bg-slate-800 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed"
+                }`}
+                disabled={hints <= 0}
+              >
+                <LightBulbIcon className="w-4 h-4" />
+                <span className="font-bold">{hints}</span>
+              </button>
+
               <div className="relative">
                 <button
                   className="p-2 hover:bg-slate-800 rounded transition-colors cursor-pointer"
@@ -904,8 +1030,32 @@ const Octordle = () => {
                       >
                         {[...Array(5)].map((_, col) => {
                           if (isCurrent) {
-                            const letter = currentGuess[col] || "";
+                            // Check Locked Hint
+                            if (hintLetters[col]) {
+                                const letter = hintLetters[col];
+                                const targetChar = game.targetWord[col];
+                                let hintColor = "bg-slate-800 border-slate-600 text-white";
+                                
+                                if (letter === targetChar) hintColor = "bg-emerald-900 border-emerald-700 text-white";
+                                else if (game.targetWord.includes(letter)) hintColor = "bg-yellow-500/30 border-yellow-500 text-white";
+                                
+                                return (
+                                  <div
+                                    key={`hint-${col}`}
+                                    className={`flex-1 aspect-square ${hintColor} border rounded flex items-center justify-center text-xs font-bold`}
+                                  >
+                                    {letter}
+                                  </div>
+                                );
+                            }
+
+                            // Standard Input
+                            const writablePositions: number[] = [];
+                            for(let i=0; i<5; i++) if (!hintLetters[i]) writablePositions.push(i);
+                            const inputIndex = writablePositions.indexOf(col);
+                            const letter = currentGuess[inputIndex] || "";
                             const isDeleting = col === deletingIndex;
+
                             return (
                               <div
                                 key={`${col}-${letterAnimationKeys[col]}`}
@@ -1005,6 +1155,17 @@ const Octordle = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmJokerModal
+        isOpen={showConfirmHint}
+        type="hint"
+        remainingCount={hints}
+        onConfirm={() => {
+          setShowConfirmHint(false);
+          handleUseHint();
+        }}
+        onCancel={() => setShowConfirmHint(false)}
+      />
     </main>
   );
 };

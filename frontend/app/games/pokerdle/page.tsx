@@ -14,6 +14,7 @@ import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 import { useUserStats } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 const RANKS = [
   "2",
@@ -143,6 +144,7 @@ const Pokerdle = () => {
   const [showPreviousGames, setShowPreviousGames] = useState(false);
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [selectedGuessIndex, setSelectedGuessIndex] = useState<number | null>(null);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
 
   // Hint system states
   // Hint system states
@@ -356,13 +358,8 @@ const Pokerdle = () => {
       revealedHintPositions
     };
 
-    // Always save to localStorage for ongoing games (as requested)
-    if (gameState === "playing") {
-      localStorage.setItem(`pokerdle-game-${gameNumber}`, JSON.stringify(savedState));
-    } else {
-      // If game is finished, remove from localStorage to follow "only for ongoing" rule
-      localStorage.removeItem(`pokerdle-game-${gameNumber}`);
-    }
+    // Always save to localStorage regardless of game state
+    localStorage.setItem(`pokerdle-game-${gameNumber}`, JSON.stringify(savedState));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -700,7 +697,7 @@ const Pokerdle = () => {
           {/* Top row: Back button | Title | Reset button */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -1295,7 +1292,7 @@ const Pokerdle = () => {
               {/* Right: Hint Button */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleUseHint}
+                  onClick={() => setShowConfirmHint(true)}
                   disabled={hints <= 0 || revealedHintPositions.length >= 5}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     hints > 0 && revealedHintPositions.length < 5
@@ -1629,6 +1626,18 @@ const Pokerdle = () => {
           </div>
         </div>
       )}
+
+      {/* Joker Confirm Modal */}
+      <ConfirmJokerModal
+        isOpen={showConfirmHint}
+        type="hint"
+        remainingCount={hints}
+        onConfirm={() => {
+          setShowConfirmHint(false);
+          handleUseHint();
+        }}
+        onCancel={() => setShowConfirmHint(false)}
+      />
     </main>
   );
 };

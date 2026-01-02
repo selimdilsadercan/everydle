@@ -27,6 +27,9 @@ import HowToPlayModal from "./HowToPlayModal";
 import ConfirmModal from "./ConfirmModal";
 import PreviousGamesModal, { AVAILABLE_GAMES } from "./PreviousGamesModal";
 import { triggerDataRefresh } from "@/components/Header";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint, useGiveup } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 type WordEntry = {
   rank: number;
@@ -146,30 +149,40 @@ const Contexto = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showPreviousGames, setShowPreviousGames] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
+  const [showConfirmSkip, setShowConfirmSkip] = useState(false);
   
-  // Joker state'leri
-  const [hints, setHints] = useState(0);
-  const [skips, setSkips] = useState(0);
-  const [coins, setCoins] = useState(0);
+  // Joker state'leri - Backend hook ile
+  const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localSkips, setLocalSkips] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
   
-  // Joker'leri localStorage'dan yükle
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const skips = backendUserId ? backendSkips : localSkips;
+  const coins = backendUserId ? backendCoins : localCoins;
+  
+  // Joker'leri localStorage'dan yükle (Local Storage fallback)
   useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+    
     const savedHints = localStorage.getItem("everydle-hints");
     const savedSkips = localStorage.getItem("everydle-giveups");
-    setHints(savedHints ? parseInt(savedHints) : 0);
-    setSkips(savedSkips ? parseInt(savedSkips) : 0);
-    setCoins(getUserStars());
+    setLocalHints(savedHints ? parseInt(savedHints) : 0);
+    setLocalSkips(savedSkips ? parseInt(savedSkips) : 0);
+    setLocalCoins(getUserStars());
     
     const handleStorageChange = () => {
       const h = localStorage.getItem("everydle-hints");
       const s = localStorage.getItem("everydle-giveups");
-      setHints(h ? parseInt(h) : 0);
-      setSkips(s ? parseInt(s) : 0);
-      setCoins(getUserStars());
+      setLocalHints(h ? parseInt(h) : 0);
+      setLocalSkips(s ? parseInt(s) : 0);
+      setLocalCoins(getUserStars());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [backendUserId]);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -282,11 +295,8 @@ const Contexto = () => {
     };
 
     // Always save to localStorage for ongoing games (as requested)
-    if (!isFinished) {
-      localStorage.setItem(`contexto-game-${gameNumber}`, JSON.stringify(gameStateToSave));
-    } else {
-      localStorage.removeItem(`contexto-game-${gameNumber}`);
-    }
+    // Always save to localStorage regardless of game state
+    localStorage.setItem(`contexto-game-${gameNumber}`, JSON.stringify(gameStateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -408,7 +418,7 @@ const Contexto = () => {
   };
 
   // İpucu kullanma fonksiyonu
-  const handleUseHint = () => {
+  const handleUseHint = async () => {
     if (!wordMap || gameWon || gaveUp || hints <= 0) return;
 
     let targetRank: number;
@@ -448,6 +458,22 @@ const Contexto = () => {
     );
 
     if (hintEntry) {
+      // Backend call for hints if logged in
+      if (backendUserId) {
+        const result = await useHint(backendUserId);
+        if (!result.data?.success) {
+          setErrorMessage("Hint kullanılamadı!");
+          return;
+        }
+        triggerDataRefresh();
+      } else {
+        // Local storage update
+        const newHintCount = localHints - 1;
+        localStorage.setItem("everydle-hints", newHintCount.toString());
+        setLocalHints(newHintCount);
+        triggerDataRefresh();
+      }
+      
       // Kelime zaten tahmin edilmemişse ekle
       if (!guesses.some((g) => g.word === hintEntry.word)) {
         const newGuess: Guess = {
@@ -472,16 +498,10 @@ const Contexto = () => {
     }
 
     setHintsUsed((prev) => prev + 1);
-    
-    // Hint sayısını azalt
-    const newHintCount = hints - 1;
-    localStorage.setItem("everydle-hints", newHintCount.toString());
-    setHints(newHintCount);
-    triggerDataRefresh();
   };
 
   // Pes Et (Atla) fonksiyonu
-  const handleGiveUp = () => {
+  const handleGiveUp = async () => {
     if (!wordMap || gameWon || gaveUp || skips <= 0) return;
 
     // Gizli kelimeyi (rank 1) bul
@@ -490,6 +510,22 @@ const Contexto = () => {
     );
 
     if (secretWord) {
+      // Backend call for giveups if logged in
+      if (backendUserId) {
+        const result = await useGiveup(backendUserId);
+        if (!result.data?.success) {
+          setErrorMessage("Atla kullanılamadı!");
+          return;
+        }
+        triggerDataRefresh();
+      } else {
+        // Local storage update
+        const newSkipCount = localSkips - 1;
+        localStorage.setItem("everydle-giveups", newSkipCount.toString());
+        setLocalSkips(newSkipCount);
+        triggerDataRefresh();
+      }
+      
       // Gizli kelimeyi tahminlere ekle
       const newGuess: Guess = {
         word: secretWord.word,
@@ -510,12 +546,6 @@ const Contexto = () => {
 
       setLastGuessedWord(secretWord.word);
       setGaveUp(true);
-      
-      // Skip sayısını azalt
-      const newSkipCount = skips - 1;
-      localStorage.setItem("everydle-giveups", newSkipCount.toString());
-      setSkips(newSkipCount);
-      triggerDataRefresh();
     }
   };
 
@@ -623,7 +653,7 @@ const Contexto = () => {
           {/* Top row: Back button | Title | Menu */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -1033,7 +1063,7 @@ const Contexto = () => {
             {/* Right: Joker Buttons */}
             <div className="flex items-center gap-2">
               <button
-                onClick={handleUseHint}
+                onClick={() => setShowConfirmHint(true)}
                 disabled={hints <= 0}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   hints > 0
@@ -1047,7 +1077,7 @@ const Contexto = () => {
               </button>
               
               <button
-                onClick={handleGiveUp}
+                onClick={() => setShowConfirmSkip(true)}
                 disabled={skips <= 0}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   skips > 0
@@ -1063,6 +1093,29 @@ const Contexto = () => {
           </div>
         </div>
       )}
+
+      {/* Joker Confirm Modals */}
+      <ConfirmJokerModal
+        isOpen={showConfirmHint}
+        type="hint"
+        remainingCount={hints}
+        onConfirm={() => {
+          setShowConfirmHint(false);
+          handleUseHint();
+        }}
+        onCancel={() => setShowConfirmHint(false)}
+      />
+
+      <ConfirmJokerModal
+        isOpen={showConfirmSkip}
+        type="skip"
+        remainingCount={skips}
+        onConfirm={() => {
+          setShowConfirmSkip(false);
+          handleGiveUp();
+        }}
+        onCancel={() => setShowConfirmSkip(false)}
+      />
     </main>
   );
 };

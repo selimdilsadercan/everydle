@@ -23,12 +23,15 @@ import {
   Bug,
 } from "lucide-react";
 import React, { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { markGameCompleted, unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
 import { getUserStars } from "@/lib/userStars";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint, useGiveup } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 // Turkish common words (stop words)
 const TURKISH_COMMON_WORDS = [
@@ -179,6 +182,8 @@ const GuessInput = ({
 
 const Redactle = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode");
   const { backendUserId } = useAuth();
   const [sections, setSections] = useState<Section[]>([]);
   const [gameState, setGameState] = useState<{
@@ -236,12 +241,20 @@ const Redactle = () => {
   // Store the actual article title from markdown file
   const [articleTitle, setArticleTitle] = useState<string>("");
 
-  // Joker ve coin state'leri
-  const [hints, setHints] = useState(0);
-  const [skips, setSkips] = useState(0);
-  const [coins, setCoins] = useState(0);
+  // Joker ve coin state'leri - Backend hook ile
+  const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
+  const [localHints, setLocalHints] = useState(0);
+  const [localSkips, setLocalSkips] = useState(0);
+  const [localCoins, setLocalCoins] = useState(0);
   const [isHintMode, setIsHintMode] = useState(false);
   const isInitialMount = useRef(true);
+  
+  // Use backend stats if logged in, otherwise local
+  const hints = backendUserId ? backendHints : localHints;
+  const skips = backendUserId ? backendSkips : localSkips;
+  const coins = backendUserId ? backendCoins : localCoins;
+  const [showConfirmHint, setShowConfirmHint] = useState(false);
+  const [showConfirmSkip, setShowConfirmSkip] = useState(false);
 
   // Memoized article rendering to prevent lag on every keystroke
   const renderedArticle = useMemo(() => {
@@ -366,24 +379,26 @@ const Redactle = () => {
     });
   }, [sections, bouncingTokenId, clickedTokenId, isHintMode]);
 
-  // Joker ve coin değerlerini yükle
+  // Joker ve coin değerlerini yükle (Local Storage fallback)
   useEffect(() => {
+    if (backendUserId) return; // Logged in users use hook
+    
     const savedHints = localStorage.getItem("everydle-hints");
     const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setHints(parseInt(savedHints));
-    if (savedSkips) setSkips(parseInt(savedSkips));
-    setCoins(getUserStars());
+    if (savedHints) setLocalHints(parseInt(savedHints));
+    if (savedSkips) setLocalSkips(parseInt(savedSkips));
+    setLocalCoins(getUserStars());
     
     const handleStorageChange = () => {
       const h = localStorage.getItem("everydle-hints");
       const s = localStorage.getItem("everydle-giveups");
-      if (h) setHints(parseInt(h));
-      if (s) setSkips(parseInt(s));
-      setCoins(getUserStars());
+      if (h) setLocalHints(parseInt(h));
+      if (s) setLocalSkips(parseInt(s));
+      setLocalCoins(getUserStars());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+  }, [backendUserId]);
 
   // Normalize Turkish text (lowercase, remove accents)
   const normalize = (str: string): string => {
@@ -914,12 +929,8 @@ const Redactle = () => {
       const storageKey = getStorageKey(selectedDate);
       const isFinished = gameState.solved;
 
-      // Always save to localStorage for ongoing games (as requested)
-      if (!isFinished) {
-        localStorage.setItem(storageKey, JSON.stringify(gameState));
-      } else {
-        localStorage.removeItem(storageKey);
-      }
+      // Always save to localStorage regardless of game state
+      localStorage.setItem(storageKey, JSON.stringify(gameState));
 
       // Save to Encore if logged in
       if (backendUserId) {
@@ -1130,7 +1141,7 @@ const Redactle = () => {
   };
 
   // Kelimeyi açma fonksiyonu (İpucu için)
-  const revealWord = (wordNormal: string) => {
+  const revealWord = async (wordNormal: string) => {
     if (!gameState || gameState.solved) return;
 
     // Başlık kelimelerini ipucuyla açma
@@ -1222,9 +1233,18 @@ const Redactle = () => {
     );
 
     // Hint sayısını azalt
-    const newHintCount = hints - 1;
-    localStorage.setItem("everydle-hints", newHintCount.toString());
-    setHints(newHintCount);
+    if (backendUserId) {
+      const result = await useHint(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Hint kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
+      }
+    } else {
+      const newHintCount = localHints - 1;
+      localStorage.setItem("everydle-hints", newHintCount.toString());
+      setLocalHints(newHintCount);
+    }
     triggerDataRefresh();
   };
 
@@ -1235,8 +1255,23 @@ const Redactle = () => {
   };
 
   // Atla (Solve) kullanma fonksiyonu
-  const handleUseSkip = () => {
+  const handleUseSkip = async () => {
     if (skips <= 0 || !gameState || gameState.solved) return;
+    
+    // Backend call for giveups if logged in
+    if (backendUserId) {
+      const result = await useGiveup(backendUserId);
+      if (!result.data?.success) {
+        setMessage("Atla kullanılamadı!");
+        setTimeout(() => setMessage(""), 2000);
+        return;
+      }
+    } else {
+      const newSkipCount = localSkips - 1;
+      localStorage.setItem("everydle-giveups", newSkipCount.toString());
+      setLocalSkips(newSkipCount);
+    }
+    triggerDataRefresh();
     
     const updatedRevealed = { ...(gameState.revealed || {}) };
     Object.keys(wordCount).forEach(word => updatedRevealed[word] = true);
@@ -1258,12 +1293,6 @@ const Redactle = () => {
       true
     );
     setMessage("Tebrikler! Makaleyi çözdünüz!");
-    
-    // Skip sayısını azalt
-    const newSkipCount = skips - 1;
-    localStorage.setItem("everydle-giveups", newSkipCount.toString());
-    setSkips(newSkipCount);
-    triggerDataRefresh();
     
     // Backend tamamlama
     const gameDay = getDayNumber(selectedDate);
@@ -1578,7 +1607,7 @@ const Redactle = () => {
         {/* Top row: Back button | Title + Date | Menu */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
             className="p-2 hover:bg-slate-800 rounded transition-colors"
           >
             <ArrowLeft className="w-6 h-6" />
@@ -1921,7 +1950,7 @@ const Redactle = () => {
               {/* Right: Joker Buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleUseHint}
+                  onClick={() => setShowConfirmHint(true)}
                   disabled={hints <= 0 || gameState?.solved}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     hints > 0 && !gameState?.solved
@@ -1935,7 +1964,7 @@ const Redactle = () => {
                 </button>
                 
                 <button
-                  onClick={handleUseSkip}
+                  onClick={() => setShowConfirmSkip(true)}
                   disabled={skips <= 0 || gameState?.solved}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     skips > 0 && !gameState?.solved
@@ -2180,6 +2209,29 @@ const Redactle = () => {
           cursor: crosshair !important;
         }
       `}</style>
+
+      {/* Joker Confirm Modals */}
+      <ConfirmJokerModal
+        isOpen={showConfirmHint}
+        type="hint"
+        remainingCount={hints}
+        onConfirm={() => {
+          setShowConfirmHint(false);
+          handleUseHint();
+        }}
+        onCancel={() => setShowConfirmHint(false)}
+      />
+
+      <ConfirmJokerModal
+        isOpen={showConfirmSkip}
+        type="skip"
+        remainingCount={skips}
+        onConfirm={() => {
+          setShowConfirmSkip(false);
+          handleUseSkip();
+        }}
+        onCancel={() => setShowConfirmSkip(false)}
+      />
     </main>
   );
 };
