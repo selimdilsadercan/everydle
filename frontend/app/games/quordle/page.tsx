@@ -6,12 +6,11 @@ import Link from "next/link";
 import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Diamond, ArrowBigRight, Check } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
-import { getUserStars } from "@/lib/userStars";
 import { triggerDataRefresh } from "@/components/Header";
-import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
+import { formatDate } from "@/lib/dailyCompletion";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { markDailyGameCompleted, unmarkDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
 import { useUserStats } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 import ConfirmJokerModal from "@/components/ConfirmJokerModal";
@@ -211,26 +210,47 @@ const Quordle = () => {
     loadWords();
   }, [searchParams]);
 
-  // Joker ve coin değerlerini yükle (Local Storage fallback)
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
+  
+  // Load completed games from backend (single efficient API call)
   useEffect(() => {
-    if (backendUserId) return; // Logged in users use hook
+    if (!backendUserId) return;
     
-    const savedHints = localStorage.getItem("everydle-hints");
-    const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setLocalHints(parseInt(savedHints));
-    if (savedSkips) setLocalSkips(parseInt(savedSkips));
-    setLocalCoins(getUserStars());
-    
-    const handleStorageChange = () => {
-      const h = localStorage.getItem("everydle-hints");
-      const s = localStorage.getItem("everydle-giveups");
-      if (h) setLocalHints(parseInt(h));
-      if (s) setLocalSkips(parseInt(s));
-      setLocalCoins(getUserStars());
+    const loadCompletedGames = async () => {
+      // Import dynamically to avoid circular dependency
+      const { getAllCompletedGames } = await import("@/app/games/actions");
+      
+      const response = await getAllCompletedGames(backendUserId, "quordle", 50);
+      if (response.data?.success && response.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        response.data.games.forEach((g: any) => {
+          // Backend returns is_won field - if game is in completed list and is_won=true -> won
+          // If is_won=false -> lost (but daily service usually only tracks completed wins)
+          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+        });
+        setGameStatusCache(cache);
+      }
     };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    loadCompletedGames();
   }, [backendUserId]);
+  
+  // Update current game status when games state changes
+  useEffect(() => {
+    if (!gameDay || games.length === 0) return;
+    
+    const allWon = games.every((g) => g.gameState === "won");
+    const allLost = games.every((g) => g.gameState === "lost");
+    const hasGuesses = games.some((g) => g.guesses.length > 0);
+    
+    if (allWon) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+    } else if (allLost) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
+    } else if (hasGuesses) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'playing' }));
+    }
+  }, [games, gameDay]);
   
   // İpucu kullanma fonksiyonu
   const handleUseHint = async () => {
@@ -288,10 +308,10 @@ const Quordle = () => {
       }
       triggerDataRefresh();
     } else {
-      const newHintCount = localHints - 1;
-      localStorage.setItem("everydle-hints", newHintCount.toString());
-      setLocalHints(newHintCount);
-      triggerDataRefresh();
+      // Giriş yapmamış kullanıcılar hint kullanamaz
+      setMessage("Hint kullanmak için giriş yapın!");
+      setTimeout(() => setMessage(""), 2000);
+      return;
     }
 
     // 5. Rastgele bir pozisyon seç ve tüm playing gridlerde aç
@@ -347,54 +367,52 @@ const Quordle = () => {
   };
 
 
-  // Oyun durumunu yükle
+  // Oyun durumunu backend'den yükle
   useEffect(() => {
-    // isLoaded eklendi, böylece oyun verisi yüklendikten sonra state kontrolü yapılır
-    if (!isLoaded || !gameDay) return;
+    if (!isLoaded || !gameDay || !backendUserId) return;
 
     const loadState = async () => {
-      let stateToLoad = null;
-
-      // 1. Try Encore first if logged in
-      if (backendUserId) {
+      try {
         const response = await getEncoreGameState(backendUserId, "quordle", gameDay);
-        if (response.data?.success && response.data.data) {
-          stateToLoad = response.data.data.state as any;
-        }
-      }
-
-      // 2. Try LocalStorage if Encore failed or not logged in
-      if (!stateToLoad) {
-        const dateStr = selectedDate || getTodayFormatted();
-        // Tarih bazlı local storage key kullan
-        const saved = localStorage.getItem(`quordle-game-${dateStr}`);
-        if (saved) {
-          try {
-            stateToLoad = JSON.parse(saved);
-          } catch (e) {
-            console.error("Oyun verisi yüklenemedi:", e);
+        
+        // Encore response structure: response.data = { data: { state: {...}, is_completed, is_won } }
+        const encoreData = response.data?.data;
+        
+        if (encoreData?.state) {
+          const stateToLoad = encoreData.state as any;
+          
+          if (stateToLoad.games && stateToLoad.games.length === 4) {
+            setGames(stateToLoad.games);
+            setCurrentGuess(stateToLoad.currentGuess || "");
+            setRevealedHints(stateToLoad.revealedHints || [[], [], [], []]);
+            setHintLetters(stateToLoad.hintLetters || {});
           }
         }
-      }
-
-      // 3. Apply state
-      if (stateToLoad && stateToLoad.games && stateToLoad.games.length === 4) {
-        setGames(stateToLoad.games);
-        setCurrentGuess(stateToLoad.currentGuess || "");
-        setRevealedHints(stateToLoad.revealedHints || [[], [], [], []]);
-        setHintLetters(stateToLoad.hintLetters || {});
+      } catch (e) {
+        console.error("Failed to load game state:", e);
       }
       
       isInitialMount.current = false;
     };
 
     loadState();
-  }, [gameDay, backendUserId, isLoaded, selectedDate]);
+  }, [gameDay, backendUserId, isLoaded]);
 
-  // Oyun durumunu kaydet
+  // Oyun durumunu backend'e kaydet - sadece kullanıcı aksiyon aldığında
   useEffect(() => {
-    if (!isLoaded || games.length === 0 || !gameDay) {
+    // İlk yüklemede kaydetme
+    if (isInitialMount.current) {
       return;
+    }
+    
+    if (!isLoaded || games.length === 0 || !gameDay || !backendUserId) {
+      return;
+    }
+    
+    // En az bir tahmin yapılmış mı kontrol et
+    const hasAnyGuess = games.some((g) => g.guesses.length > 0);
+    if (!hasAnyGuess) {
+      return; // Hiç tahmin yoksa kaydetme
     }
 
     const allWon = games.every((g) => g.gameState === "won");
@@ -408,23 +426,23 @@ const Quordle = () => {
       hintLetters
     };
 
-    // Save to localStorage with date key
-    const dateStr = selectedDate || getTodayFormatted();
-    // Always save to localStorage regardless of game state
-    localStorage.setItem(`quordle-game-${dateStr}`, JSON.stringify(stateToSave));
-
-    // Save to Encore if logged in
-    if (backendUserId) {
-      saveGameState(
-        backendUserId,
-        "quordle",
-        gameDay,
-        stateToSave as any,
-        isFinished,
-        allWon
-      );
+    // Save to Encore
+    saveGameState(
+      backendUserId,
+      "quordle",
+      gameDay,
+      stateToSave as any,
+      isFinished,
+      allWon
+    );
+    
+    // Update game status cache if won or lost
+    if (allWon) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+    } else if (allLost) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
     }
-  }, [games, currentGuess, revealedHints, gameDay, backendUserId, isLoaded, selectedDate]);
+  }, [games, currentGuess, revealedHints, hintLetters, gameDay, backendUserId, isLoaded]);
 
   // Oyun kazanıldığında levels modunda level'ı tamamla
   // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
@@ -455,8 +473,11 @@ const Quordle = () => {
     }
     // Günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
     if (allWon && mode !== "levels" && backendUserId && gameDay && !dailyCompleted && !dailyInitialMount.current) {
+      // completionDate: Kullanıcının oyunu tamamladığı an (bugün)
       const completionDate = formatDate(new Date());
-      markDailyGameCompleted(backendUserId, "quordle", gameDay, completionDate);
+      // gameDate: Oyunun hangi güne ait olduğu
+      const gameDateValue = selectedDate ? formatDate(parseDate(selectedDate)) : completionDate;
+      markDailyGameCompleted(backendUserId, "quordle", gameDay, completionDate, gameDateValue);
       setDailyCompleted(true);
       triggerDataRefresh();
     }
@@ -700,7 +721,25 @@ const Quordle = () => {
     setRevealedHints([[], [], [], []]);
     setHintLetters({});
     setMessage("");
-    localStorage.removeItem(`quordle-game-${dateStr}`);
+    
+    // Delete from backend if logged in
+    if (backendUserId && gameDay) {
+      // Delete gamestate
+      deleteGameState(backendUserId, "quordle", gameDay);
+      
+      // Also unmark from daily completed (removes checkmark from games page)
+      unmarkDailyGameCompleted(backendUserId, "quordle", gameDay);
+      
+      // Update modal cache - remove this game from completed/playing status
+      setGameStatusCache(prev => {
+        const updated = { ...prev };
+        delete updated[gameDay];
+        return updated;
+      });
+      
+      // Trigger data refresh for games page
+      triggerDataRefresh();
+    }
   };
 
   if (games.length === 0 || allWords.length === 0) {
@@ -720,12 +759,12 @@ const Quordle = () => {
       <div className="w-full max-w-5xl">
         {/* Debug Modal */}
         {showDebugModal && games.length > 0 && (
-          <>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div
-              className="fixed inset-0 bg-black/70 z-50"
+              className="absolute inset-0 bg-black/70"
               onClick={() => setShowDebugModal(false)}
             />
-            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-800 rounded-xl border border-slate-600 p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <div className="relative z-10 bg-slate-800 rounded-xl border border-slate-600 p-6 max-w-sm w-full shadow-2xl">
               <div className="flex items-center gap-2 mb-4 text-slate-300">
                 <Bug className="w-5 h-5" />
                 <h3 className="text-lg font-bold">Debug Mode</h3>
@@ -752,7 +791,7 @@ const Quordle = () => {
                 Kapat
               </button>
             </div>
-          </>
+          </div>
         )}
 
         {/* Previous Games Modal */}
@@ -791,23 +830,12 @@ const Quordle = () => {
                     const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
                     const dayName = isToday ? "Bugün" : `${parseInt(dateParts[0])} ${monthNames[parseInt(dateParts[1]) - 1]}`;
                     
-                    const savedStr = typeof window !== 'undefined' ? localStorage.getItem(`quordle-game-${entry.date}`) : null;
-                    let status: "won" | "lost" | "playing" | "not_played" = "not_played";
+                    // Check game status from cache (backend data)
+                    const cachedStatus = gameStatusCache[gameNumber];
+                    const status = cachedStatus ? cachedStatus : "not_played" as const;
                     
-                    if (savedStr) {
-                        try {
-                            const savedData = JSON.parse(savedStr);
-                            if (savedData.games && Array.isArray(savedData.games)) {
-                                const gms = savedData.games;
-                                const allWon = gms.every((g: any) => g.gameState === "won");
-                                const anyPlaying = gms.some((g: any) => g.gameState === "playing");
-                                
-                                if (allWon) status = "won";
-                                else if (anyPlaying) status = "playing";
-                                else status = "lost";
-                            }
-                        } catch (e) { console.error(e); }
-                    }
+                    // Check if this is the currently active game
+                    const isCurrentGame = gameNumber === gameDay;
 
                     return (
                       <button
@@ -818,7 +846,11 @@ const Quordle = () => {
                           router.push(`/games/quordle?date=${isoDate}`);
                           setShowPreviousGames(false);
                         }}
-                        className="w-full bg-slate-700 hover:bg-slate-600 rounded-lg p-4 transition-colors flex items-center justify-between group"
+                        className={`w-full rounded-lg p-4 transition-colors flex items-center justify-between group ${
+                          isCurrentGame 
+                            ? 'bg-blue-900/50 border-2 border-blue-500 hover:bg-blue-900/70' 
+                            : 'bg-slate-700 hover:bg-slate-600'
+                        }`}
                       >
                         <div className="flex items-center gap-4">
                           {/* Status Icon */}
@@ -846,7 +878,12 @@ const Quordle = () => {
                           {/* Game Info */}
                           <div className="text-left">
                             <div className="flex items-center gap-3">
-                              <span className={`text-lg font-bold ${status === 'won' ? 'text-emerald-400' : status === 'lost' ? 'text-red-400' : status === 'playing' ? 'text-yellow-400' : 'text-slate-400'}`}>
+                              <span className={`text-lg font-bold ${
+                                status === 'won' ? 'text-emerald-400' : 
+                                status === 'lost' ? 'text-red-400' : 
+                                status === 'playing' ? 'text-yellow-400' : 
+                                'text-slate-400'
+                              }`}>
                                 #{gameNumber}
                               </span>
                               <span className="text-sm text-slate-400">
@@ -880,7 +917,7 @@ const Quordle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold">QUORDLE</h1>
+            <h1 className="text-2xl font-bold">QuadGrid</h1>
 
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -1009,7 +1046,7 @@ const Quordle = () => {
         )}
 
         {/* 4 Wordle Grids */}
-        <div className="grid grid-cols-4 gap-2 mb-6 w-full">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6 w-full px-10">
           {games.map((game, gameIndex) => {
             const isActive = game.gameState === "playing";
             const isCurrentRow = (row: number) =>

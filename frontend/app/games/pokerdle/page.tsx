@@ -703,7 +703,7 @@ const Pokerdle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold">POKERDLE</h1>
+            <h1 className="text-2xl font-bold">Poker Puzzle</h1>
 
             <div className="relative">
               <button

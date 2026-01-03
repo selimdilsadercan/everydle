@@ -882,7 +882,7 @@ const RedactleContent = () => {
       } else {
         // New game for this date
         const newState = {
-          urlTitle: `Redactle #${dayNum}`,
+          urlTitle: `Hidden Article #${dayNum}`,
           guesses: {},
           revealed: {},
           solved: false,
@@ -1616,7 +1616,7 @@ const RedactleContent = () => {
           {/* Center: Title and Date Selector */}
           <div className="flex flex-col items-center">
             <h1 className="text-xl md:text-2xl font-bold">
-              Redactle #{getDayNumber(selectedDate)}
+              Hidden Article
             </h1>
             
             {/* Date Navigation */}

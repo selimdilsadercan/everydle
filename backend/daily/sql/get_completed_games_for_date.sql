@@ -1,5 +1,6 @@
 -- =====================================================
 -- GET COMPLETED GAMES FOR DATE - Tarihteki tamamlanan oyunlar
+-- game_date: Oyunun hangi güne ait olduğu (game_number'dan hesaplanır)
 -- =====================================================
 DROP FUNCTION IF EXISTS get_completed_games_for_date(UUID, DATE);
 
@@ -19,7 +20,7 @@ BEGIN
     FROM (
         SELECT game_id, game_number, completed_at
         FROM daily_game_completion
-        WHERE user_id = p_user_id AND completion_date = p_date
+        WHERE user_id = p_user_id AND game_date = p_date
         ORDER BY completed_at ASC
     ) g;
     

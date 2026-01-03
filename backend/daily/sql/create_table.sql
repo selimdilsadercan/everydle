@@ -1,5 +1,7 @@
 -- =====================================================
 -- DAILY_GAME_COMPLETION TABLE - Günlük oyun tamamlama
+-- completion_date: Kullanıcının oyunu ne zaman tamamladığı
+-- game_date: Oyunun hangi güne ait olduğu (game_number'dan hesaplanır)
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS daily_game_completion (
@@ -8,6 +10,7 @@ CREATE TABLE IF NOT EXISTS daily_game_completion (
     game_id TEXT NOT NULL,
     game_number INTEGER NOT NULL,
     completion_date DATE NOT NULL,
+    game_date DATE,
     completed_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, game_id, game_number)
 );
@@ -15,3 +18,4 @@ CREATE TABLE IF NOT EXISTS daily_game_completion (
 CREATE INDEX IF NOT EXISTS idx_daily_game_user_id ON daily_game_completion(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_game_game_id ON daily_game_completion(game_id);
 CREATE INDEX IF NOT EXISTS idx_daily_game_date ON daily_game_completion(completion_date);
+CREATE INDEX IF NOT EXISTS idx_daily_game_game_date ON daily_game_completion(game_date);

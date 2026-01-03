@@ -682,7 +682,7 @@ const Nerdle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold">NERDLE</h1>
+            <h1 className="text-2xl font-bold">Equation</h1>
 
             <div className="flex items-center gap-2">
               <div className="relative">

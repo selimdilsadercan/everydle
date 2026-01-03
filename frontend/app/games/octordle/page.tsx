@@ -838,7 +838,7 @@ const Octordle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold">OCTORDLE</h1>
+            <h1 className="text-2xl font-bold">OctaGrid</h1>
 
             <div className="flex items-center gap-2">
               <button

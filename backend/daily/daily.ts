@@ -30,6 +30,7 @@ export interface MarkDailyGameCompletedRequest {
     gameId: string
     gameNumber: number
     completionDate?: string
+    gameDate?: string  // Oyunun hangi güne ait olduğu
 }
 
 export interface MarkDailyGameCompletedResponse {
@@ -102,7 +103,8 @@ export const markDailyGameCompleted = api(
                 p_user_id: req.userId,
                 p_game_id: req.gameId,
                 p_game_number: req.gameNumber,
-                p_completion_date: req.completionDate ?? null
+                p_completion_date: req.completionDate ?? null,
+                p_game_date: req.gameDate ?? null
             })
 
             if (error) {

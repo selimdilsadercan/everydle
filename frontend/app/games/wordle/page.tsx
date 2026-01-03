@@ -768,7 +768,7 @@ const Wordle = () => {
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            <h1 className="text-2xl font-bold">WORDLE</h1>
+            <h1 className="text-2xl font-bold">Five Letters</h1>
 
             <div className="flex items-center gap-2">
               <div className="relative">

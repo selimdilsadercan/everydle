@@ -590,7 +590,7 @@ const Moviedle = () => {
             </button>
 
             <div className="text-center">
-              <h1 className="text-2xl font-bold">MOVIEDLE</h1>
+              <h1 className="text-2xl font-bold">CineGuess</h1>
               {gameDay && (
                 <p className="text-xs text-slate-400">Gün #{gameDay}</p>
               )}

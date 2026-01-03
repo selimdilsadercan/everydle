@@ -31,12 +31,15 @@ export async function getCompletedGamesForDate(
 
 /**
  * Mark a daily game as completed
+ * @param completionDate - When the user completed the game
+ * @param gameDate - Which day's game it is (the game's actual date)
  */
 export async function markDailyGameCompleted(
   userId: string,
   gameId: string,
   gameNumber: number,
-  completionDate?: string
+  completionDate?: string,
+  gameDate?: string
 ): Promise<ActionResponse<daily.MarkDailyGameCompletedResponse>> {
   try {
     const client = createServerClient();
@@ -45,6 +48,7 @@ export async function markDailyGameCompleted(
       gameId,
       gameNumber,
       completionDate,
+      gameDate,
     });
     
     // Dispatch event so AppBar can update via React Query refetch
@@ -79,6 +83,14 @@ export async function unmarkDailyGameCompleted(
       gameId,
       gameNumber,
     });
+    
+    // Dispatch event so games page can update via React Query refetch
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("dailyProgressUpdate", { 
+        detail: { gameId, gameNumber, action: "unmark" } 
+      }));
+    }
+    
     return { data: response, error: null };
   } catch (error) {
     console.error("Failed to unmark game completed:", error);
