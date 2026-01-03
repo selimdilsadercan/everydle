@@ -697,7 +697,7 @@ const Pokerdle = () => {
           {/* Top row: Back button | Title | Reset button */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
+              onClick={() => router.push(mode === "levels" ? "/levels" : searchParams.get("date") ? `/games?date=${searchParams.get("date")}` : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -1054,10 +1054,10 @@ const Pokerdle = () => {
                       <button
                         key={row}
                         onClick={handleClick}
-                        className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
+                        className="bg-slate-800 border border-slate-700 rounded px-2 py-2.5 min-w-[80px] w-full flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors whitespace-nowrap"
                       >
-                        <span className="text-slate-300 text-xs font-medium">{handTypeTR}</span>
-                        <span className="text-red-500 text-base">
+                        <span className="text-slate-300 text-[10px] font-medium">{handTypeTR}</span>
+                        <span className="text-red-500 text-sm">
                           {comparison === "low" ? "↑" : "↓"}
                         </span>
                       </button>
@@ -1068,9 +1068,9 @@ const Pokerdle = () => {
                       <button
                         key={row}
                         onClick={handleClick}
-                        className="bg-slate-800 border border-emerald-600 rounded px-2 py-2 min-w-[90px] h-[42px] flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors"
+                        className="bg-slate-800 border border-emerald-600 rounded px-2 py-2 min-w-[80px] h-[43px] w-full flex items-center gap-1 cursor-pointer hover:bg-slate-700 transition-colors whitespace-nowrap"
                       >
-                        <span className="text-emerald-400 text-xs font-semibold">{handTypeTR}</span>
+                        <span className="text-emerald-400 text-[10px] font-semibold">{handTypeTR}</span>
                       </button>
                     );
                   }
@@ -1078,9 +1078,9 @@ const Pokerdle = () => {
                     <button
                       key={row}
                       onClick={handleClick}
-                      className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] cursor-pointer hover:bg-slate-700 transition-colors"
+                      className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[80px] cursor-pointer hover:bg-slate-700 transition-colors whitespace-nowrap"
                     >
-                      <span className="text-slate-500 text-xs">{handTypeTR}</span>
+                      <span className="text-slate-500 text-[10px]">{handTypeTR}</span>
                     </button>
                   );
                 }
@@ -1092,7 +1092,7 @@ const Pokerdle = () => {
                       setSelectedGuessIndex(null);
                       setShowHandsModal(true);
                     }}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[90px] h-[42px] opacity-70 cursor-pointer hover:opacity-100 hover:bg-slate-700 transition-all flex items-center justify-center"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-2 min-w-[80px] h-[43px] opacity-70 cursor-pointer hover:opacity-100 hover:bg-slate-700 transition-all flex items-center justify-center"
                   >
                     <Info className="w-4 h-4 text-slate-500" />
                   </button>

@@ -194,7 +194,7 @@ const Nerdle = () => {
     }
   }, [gameState, selectedDate, backendUserId, gameDay, dailyCompleted]);
 
-  // Denklemleri yükle ve bugünün denklemini seç
+  // Denklemleri yükle ve seçilen günün denklemini seç
   useEffect(() => {
     const loadEquations = async () => {
       try {
@@ -202,22 +202,45 @@ const Nerdle = () => {
         const data: DailyEquation[] = await response.json();
         setEquations(data);
         
-        // Bugünün denklemini bul
-        const today = getTodayFormatted();
-        const todayEquation = data.find(eq => eq.date === today);
+        // URL'den tarih parametresini al (format: YYYY-MM-DD)
+        const dateParam = searchParams.get("date");
+        let targetDate: string;
         
-        if (todayEquation) {
-          setTargetEquation(todayEquation.equation);
-          setTargetDisplay(getDisplayFormat(todayEquation.equation));
+        if (dateParam) {
+          // YYYY-MM-DD -> DD.MM.YYYY dönüşümü
+          const [year, month, day] = dateParam.split('-');
+          targetDate = `${day}.${month}.${year}`;
+          setSelectedDate(targetDate);
+        } else {
+          // Bugünün tarihi
+          targetDate = getTodayFormatted();
+          setSelectedDate(null);
+        }
+        
+        const targetEquationData = data.find(eq => eq.date === targetDate);
+        
+        if (targetEquationData) {
+          setTargetEquation(targetEquationData.equation);
+          setTargetDisplay(getDisplayFormat(targetEquationData.equation));
           // Gün numarasını hesapla
-          const dayIndex = data.findIndex(eq => eq.date === today);
+          const dayIndex = data.findIndex(eq => eq.date === targetDate);
           setGameDay(dayIndex + 1);
         } else {
-          // Bugün için denklem yoksa rastgele seç
-          const randomEq = data[Math.floor(Math.random() * data.length)];
-          setTargetEquation(randomEq.equation);
-          setTargetDisplay(getDisplayFormat(randomEq.equation));
-          setGameDay(null);
+          // Hedef tarih için denklem yoksa bugünün denklemini yükle
+          const today = getTodayFormatted();
+          const todayEquation = data.find(eq => eq.date === today);
+          if (todayEquation) {
+            setTargetEquation(todayEquation.equation);
+            setTargetDisplay(getDisplayFormat(todayEquation.equation));
+            const dayIndex = data.findIndex(eq => eq.date === today);
+            setGameDay(dayIndex + 1);
+          } else {
+            // Fallback: rastgele seç
+            const randomEq = data[Math.floor(Math.random() * data.length)];
+            setTargetEquation(randomEq.equation);
+            setTargetDisplay(getDisplayFormat(randomEq.equation));
+            setGameDay(null);
+          }
         }
       } catch (error) {
         console.error("Denklemler yüklenemedi:", error);
@@ -227,7 +250,7 @@ const Nerdle = () => {
     };
 
     loadEquations();
-  }, []);
+  }, [searchParams]);
 
   // Oyun durumunu yükle - oyun numarası değiştiğinde
   useEffect(() => {
@@ -633,7 +656,7 @@ const Nerdle = () => {
           {/* Top row: Back button | Title | Menu */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
+              onClick={() => router.push(mode === "levels" ? "/levels" : searchParams.get("date") ? `/games?date=${searchParams.get("date")}` : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />

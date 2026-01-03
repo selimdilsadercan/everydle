@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -180,7 +180,7 @@ const GuessInput = ({
   );
 };
 
-const Redactle = () => {
+const RedactleContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode");
@@ -1607,7 +1607,7 @@ const Redactle = () => {
         {/* Top row: Back button | Title + Date | Menu */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
+            onClick={() => router.push(mode === "levels" ? "/levels" : searchParams.get("date") ? `/games?date=${searchParams.get("date")}` : "/games")}
             className="p-2 hover:bg-slate-800 rounded transition-colors"
           >
             <ArrowLeft className="w-6 h-6" />
@@ -2236,4 +2236,12 @@ const Redactle = () => {
   );
 };
 
-export default Redactle;
+const RedactlePage = () => {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Yükleniyor...</div>}>
+      <RedactleContent />
+    </Suspense>
+  );
+};
+
+export default RedactlePage;

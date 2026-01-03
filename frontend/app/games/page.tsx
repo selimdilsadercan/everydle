@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Users, Trophy, ChevronLeft, ChevronRight, Play, Lock, Gift, Coins, Diamond } from "lucide-react";
+import { Check, Users, Trophy, ChevronLeft, ChevronRight, Play, Lock, Gift, Coins, Diamond, X } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import AppBar from "@/components/AppBar";
 import Header, { triggerDataRefresh } from "@/components/Header";
@@ -86,29 +86,212 @@ function getGameNumberFromDate(date: Date): number {
   return WORDLE_FIRST_GAME_NUMBER + daysDiff;
 }
 
+// Tarih formatı: DD.MM.YYYY
+function formatDateForStorage(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
 // Belirli bir tarih için "devam ediyor" durumundaki oyunları bul
 function getInProgressGamesForDate(date: Date): string[] {
   if (typeof window === "undefined") return [];
   
   const inProgressGames: string[] = [];
   const gameNumber = getGameNumberFromDate(date);
+  const dateStr = formatDateForStorage(date);
   
   // Wordle kontrolü
   const wordleSave = localStorage.getItem(`wordle-game-${gameNumber}`);
   if (wordleSave) {
     try {
       const parsed = JSON.parse(wordleSave);
-      // Oyun başlamış (en az 1 tahmin var) ama bitmemiş (kazanılmamış veya kaybedilmemiş)
       if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
         inProgressGames.push("wordle");
       }
     } catch (e) {}
   }
   
-  // Diğer oyunlar için benzer kontroller eklenebilir
-  // TODO: quordle, octordle, nerdle, vb. için kontrol ekle
+  // Nerdle kontrolü
+  const nerdleSave = localStorage.getItem(`nerdle-game-${gameNumber}`);
+  if (nerdleSave) {
+    try {
+      const parsed = JSON.parse(nerdleSave);
+      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
+        inProgressGames.push("nerdle");
+      }
+    } catch (e) {}
+  }
+  
+  // Pokerdle kontrolü
+  const pokerdleSave = localStorage.getItem(`pokerdle-game-${gameNumber}`);
+  if (pokerdleSave) {
+    try {
+      const parsed = JSON.parse(pokerdleSave);
+      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
+        inProgressGames.push("pokerdle");
+      }
+    } catch (e) {}
+  }
+  
+  // Quordle kontrolü
+  const quordleSave = localStorage.getItem(`quordle-game-${dateStr}`);
+  if (quordleSave) {
+    try {
+      const parsed = JSON.parse(quordleSave);
+      if (parsed.games && Array.isArray(parsed.games)) {
+        const hasPlaying = parsed.games.some((g: { gameState: string }) => g.gameState === "playing");
+        const allWon = parsed.games.every((g: { gameState: string }) => g.gameState === "won");
+        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
+        if (hasPlaying && !allWon && !anyLost) {
+          inProgressGames.push("quordle");
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Octordle kontrolü
+  const octordleSave = localStorage.getItem(`octordle-game-${dateStr}`);
+  if (octordleSave) {
+    try {
+      const parsed = JSON.parse(octordleSave);
+      if (parsed.games && Array.isArray(parsed.games)) {
+        const hasPlaying = parsed.games.some((g: { gameState: string }) => g.gameState === "playing");
+        const allWon = parsed.games.every((g: { gameState: string }) => g.gameState === "won");
+        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
+        if (hasPlaying && !allWon && !anyLost) {
+          inProgressGames.push("octordle");
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Contexto kontrolü
+  const contextoSave = localStorage.getItem(`contexto-game-${dateStr}`);
+  if (contextoSave) {
+    try {
+      const parsed = JSON.parse(contextoSave);
+      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.solved) {
+        inProgressGames.push("contexto");
+      }
+    } catch (e) {}
+  }
+  
+  // Redactle kontrolü
+  const redactleSave = localStorage.getItem(`redactle-game-${dateStr}`);
+  if (redactleSave) {
+    try {
+      const parsed = JSON.parse(redactleSave);
+      if (parsed.guesses && Object.keys(parsed.guesses).length > 0 && !parsed.solved) {
+        inProgressGames.push("redactle");
+      }
+    } catch (e) {}
+  }
+  
+  // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
+  const moviedleSave = localStorage.getItem(`moviedle-game-${gameNumber}`);
+  if (moviedleSave) {
+    try {
+      const parsed = JSON.parse(moviedleSave);
+      // Moviedle gameState: "playing" | "won" | "lost" kullanıyor
+      if (parsed.guesses && parsed.guesses.length > 0 && parsed.gameState === "playing") {
+        inProgressGames.push("moviedle");
+      }
+    } catch (e) {}
+  }
   
   return inProgressGames;
+}
+
+// Belirli bir tarih için "kaybedilmiş" durumundaki oyunları bul
+function getLostGamesForDate(date: Date): string[] {
+  if (typeof window === "undefined") return [];
+  
+  const lostGames: string[] = [];
+  const gameNumber = getGameNumberFromDate(date);
+  const dateStr = formatDateForStorage(date);
+  
+  // Wordle kontrolü
+  const wordleSave = localStorage.getItem(`wordle-game-${gameNumber}`);
+  if (wordleSave) {
+    try {
+      const parsed = JSON.parse(wordleSave);
+      if (parsed.gameLost) {
+        lostGames.push("wordle");
+      }
+    } catch (e) {}
+  }
+  
+  // Nerdle kontrolü
+  const nerdleSave = localStorage.getItem(`nerdle-game-${gameNumber}`);
+  if (nerdleSave) {
+    try {
+      const parsed = JSON.parse(nerdleSave);
+      if (parsed.gameLost) {
+        lostGames.push("nerdle");
+      }
+    } catch (e) {}
+  }
+  
+  // Pokerdle kontrolü
+  const pokerdleSave = localStorage.getItem(`pokerdle-game-${gameNumber}`);
+  if (pokerdleSave) {
+    try {
+      const parsed = JSON.parse(pokerdleSave);
+      if (parsed.gameLost) {
+        lostGames.push("pokerdle");
+      }
+    } catch (e) {}
+  }
+  
+  // Quordle kontrolü - herhangi biri lost ise
+  const quordleSave = localStorage.getItem(`quordle-game-${dateStr}`);
+  if (quordleSave) {
+    try {
+      const parsed = JSON.parse(quordleSave);
+      if (parsed.games && Array.isArray(parsed.games)) {
+        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
+        if (anyLost) {
+          lostGames.push("quordle");
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Octordle kontrolü - herhangi biri lost ise
+  const octordleSave = localStorage.getItem(`octordle-game-${dateStr}`);
+  if (octordleSave) {
+    try {
+      const parsed = JSON.parse(octordleSave);
+      if (parsed.games && Array.isArray(parsed.games)) {
+        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
+        if (anyLost) {
+          lostGames.push("octordle");
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Contexto - kaybetme durumu yok, sadece sonsuz tahmin
+  // Contexto never loses, so skip
+  
+  // Redactle - kaybetme durumu yok
+  // Redactle never loses, so skip
+  
+  // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
+  const moviedleLostSave = localStorage.getItem(`moviedle-game-${gameNumber}`);
+  if (moviedleLostSave) {
+    try {
+      const parsed = JSON.parse(moviedleLostSave);
+      // Moviedle gameState: "playing" | "won" | "lost" kullanıyor
+      if (parsed.gameState === "lost") {
+        lostGames.push("moviedle");
+      }
+    } catch (e) {}
+  }
+  
+  return lostGames;
 }
 
 // Parse date from URL param (format: YYYY-MM-DD) - handles timezone correctly
@@ -154,6 +337,7 @@ function GamesContent() {
   // Selected date (null means no day selected)
   const [selectedDate, setSelectedDate] = useState<Date | null>(initialDate);
   const [inProgressGames, setInProgressGames] = useState<string[]>([]);
+  const [lostGames, setLostGames] = useState<string[]>([]);
   const [completedLevelIds, setCompletedLevelIds] = useState<number[]>([]);
   const [showRewardAnimation, setShowRewardAnimation] = useState<number | null>(null);
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -190,12 +374,14 @@ function GamesContent() {
     }
   };
 
-  // Load in-progress games and level progress when date changes
+  // Load in-progress games, lost games and level progress when date changes
   useEffect(() => {
     if (selectedDate) {
       setInProgressGames(getInProgressGamesForDate(selectedDate));
+      setLostGames(getLostGamesForDate(selectedDate));
     } else {
       setInProgressGames([]);
+      setLostGames([]);
     }
     
     const progress = getLevelProgress();
@@ -542,6 +728,7 @@ function GamesContent() {
           {games.map((game) => {
             const isCompleted = completedGames.includes(game.id);
             const isInProgress = inProgressGames.includes(game.id);
+            const isLost = lostGames.includes(game.id);
             const totalLevels = getTotalLevelsForGame(game.id);
             const completedLevels = getCompletedLevelsForGame(game.id, completedLevelIds);
             
@@ -563,7 +750,7 @@ function GamesContent() {
                     p-3 h-fit cursor-pointer
                   `}
                 >
-                  {/* Status Indicator: Completed / In Progress / Not Started */}
+                  {/* Status Indicator: Completed / In Progress / Lost / Not Started */}
                   {isCompleted ? (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center z-10">
                       <Check className="w-3 h-3 text-white" strokeWidth={3} />
@@ -571,6 +758,10 @@ function GamesContent() {
                   ) : isInProgress ? (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-yellow-600 flex items-center justify-center z-10">
                       <Play className="w-3 h-3 text-white" fill="white" />
+                    </div>
+                  ) : isLost ? (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-red-900/80 flex items-center justify-center z-10">
+                      <X className="w-3 h-3 text-red-400/80" strokeWidth={3} />
                     </div>
                   ) : (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-slate-600 z-10" />

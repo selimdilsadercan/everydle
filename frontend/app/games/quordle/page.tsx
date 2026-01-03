@@ -874,7 +874,7 @@ const Quordle = () => {
         <header className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.push(mode === "levels" ? "/levels" : "/games")}
+              onClick={() => router.push(mode === "levels" ? "/levels" : searchParams.get("date") ? `/games?date=${searchParams.get("date")}` : "/games")}
               className="p-2 hover:bg-slate-800 rounded transition-colors"
             >
               <ArrowLeft className="w-6 h-6" />
