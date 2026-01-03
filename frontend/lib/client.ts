@@ -204,6 +204,7 @@ export namespace daily {
         gameId: string
         gameNumber: number
         completionDate?: string
+        gameDate?: string
     }
 
     export interface MarkDailyGameCompletedResponse {
@@ -1495,25 +1496,6 @@ export namespace user {
         error?: string
     }
 
-    export interface GetOnlineFriendsResponse {
-        success: boolean
-        onlineFriendIds?: string[]
-        error?: string
-    }
-
-    export interface GetPresenceRequest {
-        userIds: string[]
-    }
-
-    export interface GetPresenceResponse {
-        success: boolean
-        presence?: { [key: string]: {
-            isOnline: boolean
-            lastSeen: string
-        } }
-        error?: string
-    }
-
     export interface GetUserByFirebaseIdResponse {
         success: boolean
         user?: User
@@ -1523,15 +1505,6 @@ export namespace user {
     export interface GetUserResponse {
         success: boolean
         user?: User
-        error?: string
-    }
-
-    export interface HeartbeatRequest {
-        userId: string
-    }
-
-    export interface HeartbeatResponse {
-        success: boolean
         error?: string
     }
 
@@ -1566,11 +1539,8 @@ export namespace user {
             this.createUser = this.createUser.bind(this)
             this.deleteUser = this.deleteUser.bind(this)
             this.getAllUsers = this.getAllUsers.bind(this)
-            this.getOnlineFriends = this.getOnlineFriends.bind(this)
-            this.getPresence = this.getPresence.bind(this)
             this.getUser = this.getUser.bind(this)
             this.getUserByFirebaseId = this.getUserByFirebaseId.bind(this)
-            this.heartbeat = this.heartbeat.bind(this)
             this.updateUser = this.updateUser.bind(this)
         }
 
@@ -1608,24 +1578,6 @@ export namespace user {
         }
 
         /**
-         * Get list of online friends for a user
-         */
-        public async getOnlineFriends(userId: string): Promise<GetOnlineFriendsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/user/presence/online-friends/${encodeURIComponent(userId)}`)
-            return await resp.json() as GetOnlineFriendsResponse
-        }
-
-        /**
-         * Get online status for multiple users
-         */
-        public async getPresence(params: GetPresenceRequest): Promise<GetPresenceResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/user/presence/status`, JSON.stringify(params))
-            return await resp.json() as GetPresenceResponse
-        }
-
-        /**
          * Get a user by ID
          */
         public async getUser(userId: string): Promise<GetUserResponse> {
@@ -1641,16 +1593,6 @@ export namespace user {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/user/firebase/${encodeURIComponent(firebaseId)}`)
             return await resp.json() as GetUserByFirebaseIdResponse
-        }
-
-        /**
-         * Update user's last seen timestamp (heartbeat)
-         * Should be called periodically by the frontend (every 30 seconds)
-         */
-        public async heartbeat(params: HeartbeatRequest): Promise<HeartbeatResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/user/presence/heartbeat`, JSON.stringify(params))
-            return await resp.json() as HeartbeatResponse
         }
 
         /**

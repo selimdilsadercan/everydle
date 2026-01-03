@@ -19,13 +19,17 @@ import {
   ChevronUp,
   Check,
   History,
+  User,
 } from "lucide-react";
-import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
-import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
+import { LightBulbIcon } from "@heroicons/react/24/solid";
+import { formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
+import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
+import { useUserStats } from "@/hooks/useProfileData";
+import { useHint } from "@/app/store/actions";
+import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
 // Genre ID -> İsim eşleştirmesi
 const GENRE_MAP: Record<number, string> = {
@@ -98,6 +102,13 @@ const Moviedle = () => {
   const mode = searchParams.get("mode"); // "levels" | "practice" | null
   const levelId = searchParams.get("levelId"); // Hangi level'dan gelindi
 
+  // Hint system
+  const userStats = useUserStats(backendUserId || undefined);
+  const hints = userStats?.hints ?? 0;
+  const [revealedActors, setRevealedActors] = useState<CastMember[]>([]);
+  const [showHintModal, setShowHintModal] = useState(false);
+  const [nextActorIndex, setNextActorIndex] = useState(0); // İlk 5 için 0-4, sonra 5, 6, 7...
+
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [targetMovie, setTargetMovie] = useState<Movie | null>(null);
@@ -126,8 +137,10 @@ const Moviedle = () => {
   const [showYearFilter, setShowYearFilter] = useState(false);
   const [showGenreFilter, setShowGenreFilter] = useState(false);
 
-  // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
+  // dailyCompleted flag - backend'den yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
   const isInitialMount = useRef(true);
   
   // Set isInitialMount to false after initial render
@@ -142,9 +155,6 @@ const Moviedle = () => {
   useEffect(() => {
     if (gameState === "won" && mode === "levels" && levelId && !levelCompleted) {
       const lid = parseInt(levelId);
-      // Yerel tamamla
-      completeLevelLocal(lid);
-      
       // Backend tamamla
       if (backendUserId) {
         completeLevelBackend(backendUserId, lid);
@@ -157,8 +167,36 @@ const Moviedle = () => {
       const completionDate = formatDate(new Date());
       markDailyGameCompleted(backendUserId, "moviedle", gameDay, completionDate);
       setDailyCompleted(true);
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+    } else if (gameState === "lost" && mode !== "levels" && backendUserId && gameDay && !dailyCompleted && !isInitialMount.current) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
     }
   }, [gameState, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted]);
+
+  // Load completed games from backend (single efficient API call)
+  useEffect(() => {
+    if (!backendUserId) return;
+    
+    const loadCompletedGames = async () => {
+      const { getAllCompletedGames } = await import("@/app/games/actions");
+      
+      const response = await getAllCompletedGames(backendUserId, "moviedle", 50);
+      if (response.data?.success && response.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        response.data.games.forEach((g: any) => {
+          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+        });
+        setGameStatusCache(cache);
+      }
+    };
+    loadCompletedGames();
+  }, [backendUserId]);
+
+  // Update current game status in cache when guesses are made
+  useEffect(() => {
+    if (!gameDay || guesses.length === 0 || gameState !== "playing") return;
+    setGameStatusCache(prev => ({ ...prev, [gameDay]: 'playing' }));
+  }, [guesses, gameDay, gameState]);
 
   // Film verilerini yükle
   useEffect(() => {
@@ -222,7 +260,7 @@ const Moviedle = () => {
     const loadState = async () => {
       let stateToLoad = null;
 
-      // 1. Try Encore first if logged in
+      // 1. Load state from Encore if logged in
       if (backendUserId) {
         const response = await getEncoreGameState(backendUserId, "moviedle", gameDay);
         if (response.data?.success && response.data.data) {
@@ -230,25 +268,17 @@ const Moviedle = () => {
         }
       }
 
-      // 2. Try LocalStorage if Encore failed or not logged in
-      if (!stateToLoad) {
-        const saved = localStorage.getItem(`moviedle-game-${gameDay}`);
-        if (saved) {
-          try {
-            stateToLoad = JSON.parse(saved);
-          } catch (e) {
-            console.error("Oyun verisi yüklenemedi:", e);
-          }
-        }
-      }
-
       // 3. Apply state
       if (stateToLoad) {
         setGuesses(stateToLoad.guesses || []);
         setGameState(stateToLoad.gameState || "playing");
+        setRevealedActors(stateToLoad.revealedActors || []);
+        setNextActorIndex(stateToLoad.nextActorIndex || 0);
       } else {
         setGuesses([]);
         setGameState("playing");
+        setRevealedActors([]);
+        setNextActorIndex(0);
       }
       
       setTimeout(() => {
@@ -268,11 +298,10 @@ const Moviedle = () => {
     const isFinished = gameState !== "playing";
     const stateToSave = {
       guesses,
-      gameState
+      gameState,
+      revealedActors,
+      nextActorIndex
     };
-
-    // Always save to localStorage so history works and state persists
-    localStorage.setItem(`moviedle-game-${gameDay}`, JSON.stringify(stateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -285,7 +314,7 @@ const Moviedle = () => {
         gameState === "won"
       );
     }
-  }, [guesses, gameState, gameDay, backendUserId]);
+  }, [guesses, gameState, revealedActors, nextActorIndex, gameDay, backendUserId]);
 
   // Arama filtreleme - filtre/arama yoksa popüler filmler, varsa filtrelenmiş sonuçlar
   const filteredMovies = useMemo(() => {
@@ -387,8 +416,19 @@ const Moviedle = () => {
       setGuesses([]);
       setSearchQuery("");
       setGameState("playing");
-      localStorage.removeItem(`moviedle-game-${gameDay}`);
+      setRevealedActors([]);
+      setNextActorIndex(0);
       setDailyCompleted(false);
+      
+      if (backendUserId) {
+        deleteGameState(backendUserId, "moviedle", gameDay);
+        setGameStatusCache(prev => {
+          const newCache = { ...prev };
+          delete newCache[gameDay];
+          return newCache;
+        });
+      }
+      triggerDataRefresh();
       return;
     }
 
@@ -398,6 +438,8 @@ const Moviedle = () => {
     setGuesses([]);
     setSearchQuery("");
     setGameState("playing");
+    setRevealedActors([]);
+    setNextActorIndex(0);
   };
 
   const getYearRange = () => {
@@ -423,8 +465,54 @@ const Moviedle = () => {
     };
   };
 
-  // Yönetmen bilgisi movies.json'da yok, o yüzden şimdilik kaldırıyoruz
-  // Aktör bilgisi de yok, o da şimdilik kaldırıldı
+  // Hint kullanma fonksiyonu
+  const handleUseHint = async () => {
+    if (hints <= 0 || !targetMovie || !targetMovie.cast || targetMovie.cast.length === 0) return;
+    if (!backendUserId) return;
+
+    const cast = targetMovie.cast;
+    
+    // Fonksiyon: Bir oyuncunun şu an görünür olup olmadığını kontrol et (ipucu veya tahmin ile)
+    const isCurrentlyVisible = (actorId: number) => {
+      return revealedActors.some(r => r.id === actorId) || 
+             guesses.some(g => g.movie.cast?.some(ca => ca.id === actorId));
+    };
+
+    let actorToReveal: CastMember | null = null;
+
+    if (nextActorIndex < 5) {
+      // İlk 5 ipucu: İlk 5 oyuncu arasından henüz görünmeyen rastgele birini seç
+      const availableInTop5 = cast.slice(0, 5).filter(actor => !isCurrentlyVisible(actor.id));
+      if (availableInTop5.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableInTop5.length);
+        actorToReveal = availableInTop5[randomIndex];
+      }
+    }
+    
+    // Eğer ilk 5'te kalmadıysa veya 5. ipucundan sonraysak, tüm cast içinde ilk görünmeyen oyuncuyu bul
+    if (!actorToReveal) {
+      actorToReveal = cast.find(actor => !isCurrentlyVisible(actor.id)) || null;
+    }
+
+    if (!actorToReveal) {
+      // Açılacak oyuncu kalmadı (tüm cast görünür durumda)
+      setShowHintModal(false);
+      return;
+    }
+
+    // Backend'de hint'i kullan
+    try {
+      await useHint(backendUserId);
+      triggerDataRefresh();
+
+      setRevealedActors(prev => [...prev, actorToReveal!]);
+      setNextActorIndex(prev => prev + 1);
+    } catch (error) {
+      console.error("İpucu kullanılırken hata oluştu:", error);
+    }
+    
+    setShowHintModal(false);
+  };
 
   const yearRange = getYearRange();
 
@@ -470,17 +558,10 @@ const Moviedle = () => {
                     const date = new Date(entry.date);
                     const formattedDate = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
                     
-                    // Check local storage for completion
-                    const savedState = localStorage.getItem(`moviedle-game-${entry.day}`);
-                    let isWon = false;
-                    let isPlayed = false;
-                    if (savedState) {
-                      try {
-                        const parsed = JSON.parse(savedState);
-                        isWon = parsed.gameState === "won";
-                        isPlayed = true;
-                      } catch (e) {}
-                    }
+                    const status = gameStatusCache[entry.day] || 'not_played';
+                    const isWon = status === 'won';
+                    const isLost = status === 'lost';
+                    const isPlaying = status === 'playing';
 
                     return (
                       <button
@@ -503,6 +584,10 @@ const Moviedle = () => {
                         <div className="flex items-center gap-2">
                            {isWon ? (
                             <span className="text-emerald-400 font-bold text-sm">Çözüldü</span>
+                          ) : isLost ? (
+                            <span className="text-red-400 font-bold text-sm">Kaybedildi</span>
+                          ) : isPlaying ? (
+                            <span className="text-blue-400 font-bold text-sm">Devam Ediyor</span>
                           ) : (
                             <span className="text-slate-500 text-sm">Oyna</span>
                           )}
@@ -578,6 +663,17 @@ const Moviedle = () => {
             </div>
           </>
         )}
+
+        {/* Confirm Joker Modal */}
+        <ConfirmJokerModal
+          isOpen={showHintModal}
+          onCancel={() => setShowHintModal(false)}
+          onConfirm={handleUseHint}
+          title="Oyuncu İpucu"
+          description="Bir oyuncu ismini açmak istiyor musunuz? Bu işlem 1 ipucu hakkınızı kullanacaktır."
+          remainingCount={hints}
+          type="hint"
+        />
 
         <header className="mb-6">
           {/* Top row: Back button | Title | Menu */}
@@ -1072,11 +1168,23 @@ const Moviedle = () => {
           </div>
         )}
 
+        {/* Initial State */}
+        {guesses.length === 0 && gameState === "playing" && (
+          <div className="text-center text-slate-400 mt-2 mb-6 bg-slate-800 rounded-lg border border-slate-700 p-8">
+            <Film className="w-12 h-12 mx-auto mb-4 text-slate-500" />
+            <p className="text-lg">Bir film arayarak başla!</p>
+            <p className="text-sm mt-2 text-slate-500">
+              Her tahmin sonrası tür ve yıl ipuçları alacaksın.
+            </p>
+          </div>
+        )}
+
         {/* Hints Section */}
-        {guesses.length > 0 && targetMovie && (
+        {targetMovie && (
           <div className="space-y-3">
             {/* Genre Hints */}
-            <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+            {guesses.length > 0 && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
               <div className="flex items-center justify-center gap-3 flex-wrap">
                 <span className="text-slate-300 font-medium">Türler:</span>
                 {(targetMovie.genre_ids || []).map((genreId, idx) => {
@@ -1097,11 +1205,13 @@ const Moviedle = () => {
                     </span>
                   );
                 })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Year Hint */}
-            <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+            {guesses.length > 0 && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
               <div className="flex items-center justify-center gap-4">
                 {yearRange.min !== "?" && yearRange.min === yearRange.max ? (
                   <>
@@ -1127,24 +1237,42 @@ const Moviedle = () => {
                     </span>
                   </>
                 )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Cast Hints */}
             {targetMovie.cast && targetMovie.cast.length > 0 && (
               <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-                <div className="text-slate-300 font-medium mb-3 text-center">
-                  Oyuncular:
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <span className="text-slate-300 font-medium">Oyuncular:</span>
+                  {gameState === "playing" && (
+                    <button
+                      onClick={() => setShowHintModal(true)}
+                      disabled={hints <= 0}
+                      className={`text-xs px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors font-medium ${
+                        hints > 0 
+                        ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-lg shadow-yellow-900/20" 
+                        : "bg-slate-700 text-slate-400 cursor-not-allowed"
+                      }`}
+                    >
+                      <LightBulbIcon className="w-3.5 h-3.5" />
+                      İpucu ({hints})
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {targetMovie.cast.map((actor, idx) => {
                     // Sadece tahmin edilen filmlerdeki oyuncular gizli filmde de varsa onları aç
+                    // İpucu ile açılan oyuncuları da aç
                     // Oyun bittiyse (kazandı veya kaybetti) hepsini aç
                     const isRevealed =
                       gameState !== "playing" ||
                       guesses.some((g) =>
                         g.movie.cast?.some((ca) => ca.id === actor.id)
-                      );
+                      ) ||
+                      revealedActors.some((r) => r.id === actor.id);
+
                     // İsmi x'lerle gizle
                     const hiddenName = actor.name
                       .split(" ")
@@ -1172,17 +1300,6 @@ const Moviedle = () => {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Initial State */}
-        {guesses.length === 0 && gameState === "playing" && (
-          <div className="text-center text-slate-400 mt-8 bg-slate-800 rounded-lg border border-slate-700 p-8">
-            <Film className="w-12 h-12 mx-auto mb-4 text-slate-500" />
-            <p className="text-lg">Bir film arayarak başla!</p>
-            <p className="text-sm mt-2 text-slate-500">
-              Her tahmin sonrası tür ve yıl ipuçları alacaksın.
-            </p>
           </div>
         )}
       </div>

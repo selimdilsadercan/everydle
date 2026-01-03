@@ -11,6 +11,8 @@ interface ConfirmJokerModalProps {
   remainingCount: number;
   onConfirm: () => void;
   onCancel: () => void;
+  title?: string;
+  description?: string;
 }
 
 export default function ConfirmJokerModal({
@@ -19,6 +21,8 @@ export default function ConfirmJokerModal({
   remainingCount,
   onConfirm,
   onCancel,
+  title,
+  description,
 }: ConfirmJokerModalProps) {
   if (!isOpen) return null;
 
@@ -57,15 +61,15 @@ export default function ConfirmJokerModal({
         
         {/* Title */}
         <h3 className="text-lg font-bold text-center text-white mb-1">
-          {isHint ? "İpucu Kullan" : "Atla Kullan"}
+          {title || (isHint ? "İpucu Kullan" : "Atla Kullan")}
         </h3>
         
         {/* Description */}
         <p className="text-slate-400 text-center text-sm mb-3 px-2">
-          {isHint 
+          {description || (isHint 
             ? "Bir ipucu kullanarak rastgele bir harf/pozisyon açılacak."
             : "Atla kullanarak oyunu geçebilirsiniz."
-          }
+          )}
         </p>
         
         {/* Remaining Count */}
