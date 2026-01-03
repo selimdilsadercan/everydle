@@ -688,7 +688,7 @@ const Quordle = () => {
     if (hasCorrect) return "bg-emerald-600 text-white";
     if (hasPresent) return "bg-yellow-500 text-white";
     // Bazı oyunlarda absent ama hepsinde değil
-    if (absentInGames.size > 0) return "bg-slate-700 text-slate-400";
+    if (absentInGames.size > 0) return "bg-slate-800 text-slate-500";
     // Henüz denenmemiş - açık gri arka plan
     return "bg-slate-600 text-slate-200";
   };
