@@ -77,6 +77,10 @@ const Nerdle = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirmHint, setShowConfirmHint] = useState(false);
+  const [shakeRow, setShakeRow] = useState(false);
+  const [showInvalidToast, setShowInvalidToast] = useState(false);
+  const [charAnimationKeys, setCharAnimationKeys] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
   // Joker ve coin state'leri - Backend hook ile
   const { hints: backendHints, giveups: backendSkips, stars: backendCoins, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
@@ -428,19 +432,35 @@ const Nerdle = () => {
               setRevealedHints([]); // Yeni satır için hintleri temizle
             }
           } else {
-            setMessage("Geçersiz denklem! Matematiksel olarak doğru olmalı.");
-            setTimeout(() => setMessage(""), 2000);
+            // Shake animasyonu ve toast göster
+            setShakeRow(true);
+            setShowInvalidToast(true);
+            setTimeout(() => setShakeRow(false), 600);
+            setTimeout(() => setShowInvalidToast(false), 2000);
           }
         }
       } else if (normalizedKey === "Backspace") {
         if (userInputLength > 0) {
-          setCurrentGuess(currentGuess.slice(0, -1));
+          const deleteIdx = userInputLength - 1;
+          setDeletingIndex(deleteIdx);
+          setTimeout(() => {
+            setDeletingIndex(null);
+            setCurrentGuess(currentGuess.slice(0, -1));
+          }, 100);
         }
       } else if (
         normalizedKey.length === 1 &&
         /[0-9+\-*/=()]/.test(normalizedKey) &&
         userInputLength < writablePositions.length
       ) {
+        // Pop animasyonu için karakterin key'ini güncelle
+        const newIndex = userInputLength;
+        setCharAnimationKeys(prev => {
+          const newKeys = [...prev];
+          newKeys[writablePositions[newIndex]] = prev[writablePositions[newIndex]] + 1;
+          return newKeys;
+        });
+        
         setCurrentGuess((prev) => prev + normalizedKey);
       }
     },
@@ -792,10 +812,10 @@ const Nerdle = () => {
           </div>
         )}
 
-        {/* Error Message */}
-        {message && gameState === "playing" && (
-          <div className="mb-6 bg-slate-800 border border-slate-700 rounded-md px-4 py-3 text-center">
-            <p className="text-sm text-slate-300">{message}</p>
+        {/* Invalid Equation Toast */}
+        {showInvalidToast && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-800 border border-slate-600 rounded-lg px-6 py-3 shadow-xl animate-fade-in">
+            <p className="text-sm font-semibold text-slate-200 whitespace-nowrap">Geçersiz denklem!</p>
           </div>
         )}
 
@@ -806,25 +826,30 @@ const Nerdle = () => {
             const isCurrentRow = gameState === "playing" && row === guesses.length;
 
             return (
-              <div key={row} className="flex gap-2 justify-center">
+              <div key={row} className={`flex gap-2 justify-center ${isCurrentRow && shakeRow ? 'animate-shake' : ''}`}>
                 {[...Array(8)].map((_, col) => {
                   if (isCurrentRow) {
                     const writablePositions = [0, 1, 2, 3, 4, 5, 6, 7].filter(pos => !revealedHints.includes(pos));
                     let char = "";
+                    let userCharIdx = -1;
                     
                     if (revealedHints.includes(col)) {
                       char = targetEquation[col];
                     } else {
-                      const userCharIdx = writablePositions.indexOf(col);
+                      userCharIdx = writablePositions.indexOf(col);
                       if (userCharIdx !== -1) {
                         char = currentGuess[userCharIdx] || "";
                       }
                     }
 
+                    const isDeleting = userCharIdx === deletingIndex;
+                    
                     return (
                       <div
-                        key={col}
-                        className={`w-12 h-12 ${revealedHints.includes(col) ? 'bg-emerald-600/30' : 'bg-slate-800'} border-2 ${revealedHints.includes(col) ? 'border-emerald-500' : 'border-slate-700'} rounded flex items-center justify-center text-slate-100 text-xl font-bold transition-all duration-300`}
+                        key={`${col}-${charAnimationKeys[col]}`}
+                        className={`w-12 h-12 ${revealedHints.includes(col) ? 'bg-emerald-600/30' : 'bg-slate-800'} border-2 ${revealedHints.includes(col) ? 'border-emerald-500' : 'border-slate-700'} rounded flex items-center justify-center text-slate-100 text-xl font-bold ${
+                          isDeleting ? 'animate-letter-shrink' : char ? 'animate-letter-pop' : ''
+                        }`}
                       >
                         {displayChar(char)}
                       </div>

@@ -3,21 +3,23 @@
 import React from "react";
 
 // Games page content skeleton (without Header/AppBar)
-export function GamesPageSkeleton() {
+export function GamesPageSkeleton({ hideDaySwitcher = false }: { hideDaySwitcher?: boolean }) {
   return (
-    <main className="max-w-lg mx-auto px-4 py-4">
+    <main className="max-w-lg mx-auto">
       {/* Week Selector Skeleton */}
-      <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-slate-800 rounded-lg animate-pulse" />
-          <div className="flex-1 flex items-center gap-1">
-            {[...Array(7)].map((_, i) => (
-              <div key={i} className="flex-1 h-16 bg-slate-800 rounded-xl animate-pulse" style={{ animationDelay: `${i * 50}ms` }} />
-            ))}
+      {!hideDaySwitcher && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-slate-800 rounded-lg animate-pulse" />
+            <div className="flex-1 flex items-center gap-1">
+              {[...Array(7)].map((_, i) => (
+                <div key={i} className="flex-1 h-16 bg-slate-800 rounded-xl animate-pulse" style={{ animationDelay: `${i * 50}ms` }} />
+              ))}
+            </div>
+            <div className="w-10 h-10 bg-slate-800 rounded-lg animate-pulse" />
           </div>
-          <div className="w-10 h-10 bg-slate-800 rounded-lg animate-pulse" />
         </div>
-      </div>
+      )}
 
       {/* Chest Area Skeleton */}
       <div className="mb-4 bg-slate-800/80 rounded-2xl p-4 border border-slate-700">

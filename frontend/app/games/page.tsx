@@ -144,7 +144,9 @@ function getInProgressGamesForDate(date: Date): string[] {
         const hasPlaying = parsed.games.some((g: { gameState: string }) => g.gameState === "playing");
         const allWon = parsed.games.every((g: { gameState: string }) => g.gameState === "won");
         const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
-        if (hasPlaying && !allWon && !anyLost) {
+        // En az bir tahmin yapılmış mı kontrol et
+        const hasAnyGuess = parsed.games.some((g: { guesses?: unknown[][] }) => g.guesses && g.guesses.length > 0);
+        if (hasPlaying && !allWon && !anyLost && hasAnyGuess) {
           inProgressGames.push("quordle");
         }
       }
@@ -160,7 +162,9 @@ function getInProgressGamesForDate(date: Date): string[] {
         const hasPlaying = parsed.games.some((g: { gameState: string }) => g.gameState === "playing");
         const allWon = parsed.games.every((g: { gameState: string }) => g.gameState === "won");
         const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
-        if (hasPlaying && !allWon && !anyLost) {
+        // En az bir tahmin yapılmış mı kontrol et
+        const hasAnyGuess = parsed.games.some((g: { guesses?: unknown[][] }) => g.guesses && g.guesses.length > 0);
+        if (hasPlaying && !allWon && !anyLost && hasAnyGuess) {
           inProgressGames.push("octordle");
         }
       }
@@ -536,12 +540,77 @@ function GamesContent() {
     triggerDataRefresh();
   }, [queryClient, backendUserId, selectedDateStr]);
 
-  // Auth yüklenene kadar skeleton göster
+  // Auth veya veriler yüklenene kadar skeleton göster (day switcher hariç)
+  const isDataLoading = isAuthenticated && (completedGamesLoading || claimedChestsLoading);
+  
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-900">
         <Header />
         <GamesPageSkeleton />
+        <AppBar currentPage="games" />
+      </div>
+    );
+  }
+  
+  // Veriler yüklenirken day switcher'ı göster ama içerik skeleton olsun
+  if (isDataLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900">
+        <Header />
+        <main className="max-w-lg mx-auto px-4 py-4">
+          {/* Weekly Day Selector - always visible */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToPrevDay}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
+              </button>
+              
+              <div className="flex-1 flex items-center gap-1">
+                {weekDays.map((day, index) => (
+                  <button
+                    key={index}
+                    onClick={() => !day.isFuture && updateSelectedDate(day.date)}
+                    disabled={day.isFuture}
+                    className={`
+                      flex-1 py-2 px-1 rounded-xl flex flex-col items-center gap-0.5 transition-all
+                      ${day.isFuture 
+                        ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed'
+                        : 'bg-slate-800 hover:bg-slate-700'
+                      }
+                    `}
+                  >
+                    <span className={`text-[10px] font-medium ${day.isSelected ? 'text-emerald-400' : 'text-slate-400'}`}>{day.dayName}</span>
+                    <span className={`text-sm font-bold ${day.isSelected ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {day.dayNumber}
+                    </span>
+                    <span className={`text-[10px] font-bold -mt-1 ${day.isSelected ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {day.monthName}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              
+              <button
+                onClick={goToNextDay}
+                disabled={!canGoNextDay()}
+                className={`p-2 rounded-lg transition-colors ${
+                  canGoNextDay() 
+                    ? 'bg-slate-800 hover:bg-slate-700' 
+                    : 'bg-slate-800/50 cursor-not-allowed'
+                }`}
+              >
+                <ChevronRight className={`w-4 h-4 ${canGoNextDay() ? 'text-slate-400' : 'text-slate-600'}`} />
+              </button>
+            </div>
+          </div>
+          
+          {/* Skeleton for remaining content */}
+          <GamesPageSkeleton hideDaySwitcher />
+        </main>
         <AppBar currentPage="games" />
       </div>
     );
