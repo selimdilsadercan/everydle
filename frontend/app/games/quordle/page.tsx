@@ -415,9 +415,9 @@ const Quordle = () => {
       return; // Hiç tahmin yoksa kaydetme
     }
 
-    const allWon = games.every((g) => g.gameState === "won");
-    const allLost = games.every((g) => g.gameState === "lost");
-    const isFinished = allWon || allLost;
+    const allWon = games.length === 4 && games.every((g) => g.gameState === "won");
+    const someLost = games.some((g) => g.gameState === "lost");
+    const isFinished = allWon || someLost;
 
     const stateToSave = {
       games,
@@ -439,8 +439,10 @@ const Quordle = () => {
     // Update game status cache if won or lost
     if (allWon) {
       setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
-    } else if (allLost) {
+    } else if (someLost) {
       setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
+    } else if (hasAnyGuess) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'playing' }));
     }
   }, [games, currentGuess, revealedHints, hintLetters, gameDay, backendUserId, isLoaded]);
 
@@ -487,8 +489,8 @@ const Quordle = () => {
   // Oyun bittiğinde yukarı scroll yap
   useEffect(() => {
     const allWon = games.length === 4 && games.every((g) => g.gameState === "won");
-    const allLost = games.length === 4 && games.every((g) => g.gameState === "lost");
-    if (allWon || allLost) {
+    const someLost = games.some((g) => g.gameState === "lost");
+    if (allWon || someLost) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [games]);
@@ -531,8 +533,8 @@ const Quordle = () => {
   const handleKeyPress = useCallback(
     (key: string) => {
       const allWon = games.every((g) => g.gameState === "won");
-      const allLost = games.every((g) => g.gameState === "lost");
-      if (allWon || allLost) return;
+      const someLost = games.some((g) => g.gameState === "lost");
+      if (allWon || someLost) return;
 
       // Yazılabilir pozisyonları bul (hintLetters olmayanlar)
       const writablePositions = [0, 1, 2, 3, 4].filter(pos => !hintLetters[pos]);
@@ -762,9 +764,10 @@ const Quordle = () => {
     );
   }
 
-  const allWon = games.every((g) => g.gameState === "won");
-  const allLost = games.every((g) => g.gameState === "lost");
-  const totalGuesses = Math.max(...games.map((g) => g.guesses.length));
+  const allWon = games.length === 4 && games.every((g) => g.gameState === "won");
+  const someLost = games.some((g) => g.gameState === "lost");
+  const isFinished = allWon || someLost;
+  const currentGuessCount = Math.max(...games.map((g) => g.guesses.length));
 
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center py-4 px-4">
@@ -995,11 +998,11 @@ const Quordle = () => {
             </div>
           </div>
 
-          {!allWon && !allLost && (
+          {!isFinished && (
             <div className="flex items-center justify-between text-sm font-semibold">
               <div className="flex items-center gap-4">
                 <span>
-                  Tahmin: <span className="text-slate-400">{totalGuesses}/9</span>
+                  Tahmin: <span className="text-slate-400">{currentGuessCount}/9</span>
                 </span>
                 <span>
                   Tamamlanan:{" "}
@@ -1016,21 +1019,17 @@ const Quordle = () => {
         </header>
 
         {/* Success/Lost State */}
-        {(allWon || allLost) && (
-          <div
-            className={`mb-6 bg-slate-800 rounded-lg p-6 text-center border-2 ${
-              allLost ? "border-slate-500" : "border-emerald-600"
-            }`}
-          >
-            <h2
-              className={`text-2xl font-bold mb-3 ${
-                allLost ? "text-slate-300" : "text-emerald-500"
-              }`}
-            >
-              {allLost ? "Oyun Bitti" : "Tebrikler! Tüm Kelimeleri Buldunuz!"}
+        {isFinished && (
+          <div className={`mb-6 bg-slate-800 rounded-lg p-6 text-center border-2 ${
+            someLost ? 'border-slate-500' : 'border-emerald-600'
+          }`}>
+            <h2 className={`text-2xl font-bold mb-3 ${
+              someLost ? 'text-slate-300' : 'text-emerald-500'
+            }`}>
+              {someLost ? 'Oyun Bitti' : 'Tebrikler! Tüm Kelimeleri Buldunuz!'}
             </h2>
             <p className="text-sm text-slate-400 mb-4">
-              Toplam tahmin: {totalGuesses}
+              Toplam tahmin: {currentGuessCount}
             </p>
             {mode === "levels" && (
               <button

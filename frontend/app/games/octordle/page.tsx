@@ -325,53 +325,58 @@ const Octordle = () => {
     }
   }, [gameDay, backendUserId, isLoaded, selectedDate]);
 
-  // Oyun durumunu kaydet - debounced
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+  // LocalStorage ve Backend senkronizasyonu
   useEffect(() => {
     if (!isLoaded || games.length === 0 || !gameDay) return;
+    if (isInitialMount.current) return;
 
-    // Debounce save to prevent too many API calls
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(async () => {
-      const stateToSave = {
-        games,
-        currentGuess,
-      };
+    const allWon = games.every(g => g.gameState === "won");
+    const someLost = games.some(g => g.gameState === "lost");
+    const isGameOver = allWon || someLost;
+    const dateStr = selectedDate || getTodayFormatted();
+
+    const handleSave = async () => {
+      const stateToSave = { games, currentGuess };
       
-      const allWon = games.every(g => g.gameState === "won");
-      const allLost = games.every(g => g.gameState === "lost");
-      
-      // Giriş yapmış kullanıcılar için backend'e kaydet
       if (backendUserId) {
         await saveGameState(
           backendUserId,
           "octordle",
           gameDay,
           stateToSave,
-          allWon || allLost,
+          isGameOver,
           allWon
         );
       }
       
-      // LocalStorage'a kaydet (sadece devam eden oyunlar için)
-      const dateStr = selectedDate || getTodayFormatted();
-      if (allWon || allLost) {
+      if (isGameOver) {
         localStorage.removeItem(`octordle-game-${dateStr}`);
       } else {
         localStorage.setItem(`octordle-game-${dateStr}`, JSON.stringify(stateToSave));
       }
-    }, 500);
-    
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
     };
+
+    // Oyun bittiğinde hemen kaydet, aksi takdirde ufak bir gecikme olabilir (isteğe bağlı)
+    // Ama güvenli olan her zaman hemen kaydetmektir, özellikle Octordle gibi uzun oyunlarda.
+    handleSave();
   }, [games, currentGuess, selectedDate, isLoaded, backendUserId, gameDay]);
+
+  // Update current game status cache reactively
+  useEffect(() => {
+    if (!gameDay || !backendUserId || games.length === 0) return;
+    
+    const allWon = games.every(g => g.gameState === "won");
+    const someLost = games.some(g => g.gameState === "lost");
+    const hasGuesses = games.some(g => g.guesses.length > 0);
+    
+    if (allWon) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+    } else if (someLost) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
+    } else if (hasGuesses) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'playing' }));
+    }
+  }, [games, gameDay, backendUserId]);
 
   // --- JOKER LOGIC ---
   const handleUseHint = async () => {
@@ -486,8 +491,8 @@ const Octordle = () => {
   const handleKeyPress = useCallback(
     (key: string) => {
       const allWon = games.every((g) => g.gameState === "won");
-      const allLost = games.every((g) => g.gameState === "lost");
-      if (allWon || allLost) return;
+      const someLost = games.some((g) => g.gameState === "lost");
+      if (allWon || someLost) return;
 
       // Determine writable positions (not hinted)
       const writablePositions: number[] = [];
@@ -703,8 +708,9 @@ const Octordle = () => {
     );
   }
 
-  const allWon = games.every((g) => g.gameState === "won");
-  const allLost = games.every((g) => g.gameState === "lost");
+  const allWon = games.length > 0 && games.every((g) => g.gameState === "won");
+  const someLost = games.some((g) => g.gameState === "lost");
+  const isGameOver = allWon || someLost;
   const totalGuesses = Math.max(...games.map((g) => g.guesses.length));
 
   return (
@@ -945,7 +951,7 @@ const Octordle = () => {
             </div>
           </div>
 
-          {!allWon && !allLost && (
+          {!isGameOver && (
             <div className="flex items-center justify-between text-sm font-semibold">
               <div className="flex items-center gap-4">
                 <span>
@@ -967,18 +973,18 @@ const Octordle = () => {
         </header>
 
         {/* Success/Lost State */}
-        {(allWon || allLost) && (
+        {isGameOver && (
           <div
             className={`mb-6 bg-slate-800 rounded-lg p-6 text-center border-2 ${
-              allLost ? "border-slate-500" : "border-emerald-600"
+              someLost ? "border-slate-500" : "border-emerald-600"
             }`}
           >
             <h2
               className={`text-2xl font-bold mb-3 ${
-                allLost ? "text-slate-300" : "text-emerald-500"
+                someLost ? "text-slate-300" : "text-emerald-500"
               }`}
             >
-              {allLost ? "Oyun Bitti" : "Tebrikler! Tüm Kelimeleri Buldunuz!"}
+              {someLost ? "Oyun Bitti" : "Tebrikler! Tüm Kelimeleri Buldunuz!"}
             </h2>
             <p className="text-sm text-slate-400 mb-4">
               Toplam tahmin: {totalGuesses}

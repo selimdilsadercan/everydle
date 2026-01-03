@@ -239,6 +239,14 @@ export async function saveGameState(
       isCompleted,
       isWon,
     });
+    
+    // Dispatch event so other components can refresh their daily progress data
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("dailyProgressUpdate", { 
+        detail: { gameId, gameNumber, isCompleted, isWon } 
+      }));
+    }
+    
     return { data: response, error: null };
   } catch (error) {
     console.error("Failed to save game state:", error);
