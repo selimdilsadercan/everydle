@@ -378,7 +378,7 @@ export default function ProfilePage() {
           <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-slate-700/50 rounded-xl p-3 text-center">
             <Trophy className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
             <p className="text-xl font-bold text-white">{stats.trophies}</p>
@@ -392,29 +392,10 @@ export default function ProfilePage() {
           <div className="bg-slate-700/50 rounded-xl p-3 text-center">
             <Diamond className="w-5 h-5 text-orange-400 mx-auto mb-1" />
             <p className="text-xl font-bold text-white">{stats.stars}</p>
-            <p className="text-xs text-slate-400">Yıldız</p>
-          </div>
-          <div className="bg-slate-700/50 rounded-xl p-3 text-center">
-            <Zap className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-            <p className="text-xl font-bold text-white">{stats.currentLevel}</p>
-            <p className="text-xs text-slate-400">Seviye</p>
+            <p className="text-xs text-slate-400">Coin</p>
           </div>
         </div>
       )}
-
-      {/* Inventory */}
-      <div className="flex gap-3">
-        <div className="flex-1 bg-slate-700/30 rounded-xl p-3 flex items-center gap-2">
-          <LightBulbIcon className="w-5 h-5 text-yellow-400" />
-          <span className="text-white font-medium">{stats.hints}</span>
-          <span className="text-slate-400 text-sm">İpucu</span>
-        </div>
-        <div className="flex-1 bg-slate-700/30 rounded-xl p-3 flex items-center gap-2">
-          <Star className="w-5 h-5 text-pink-400" />
-          <span className="text-white font-medium">{stats.giveups}</span>
-          <span className="text-slate-400 text-sm">Pas</span>
-        </div>
-      </div>
     </div>
   );
 
@@ -464,35 +445,7 @@ export default function ProfilePage() {
   const renderFriendshipSection = () => (
     <div className="space-y-6 mb-8">
       {/* Invite Link Section */}
-      <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <UserPlus className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <h3 className="text-white font-bold">Arkadaş Davet Et</h3>
-              <p className="text-xs text-slate-400">Linkini paylaş, beraber oyna!</p>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={handleCopyInviteLink}
-          className="w-full py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-medium flex items-center justify-center gap-2 transition-all relative overflow-hidden"
-        >
-          {showCopyFeedback ? (
-            <>
-              <Check className="w-5 h-5 text-emerald-400" />
-              <span className="text-emerald-400">Kopyalandı!</span>
-            </>
-          ) : (
-            <>
-              <Share2 className="w-5 h-5" />
-              <span>Davet Linkini Kopyala</span>
-            </>
-          )}
-        </button>
-      </div>
+
 
       {/* Pending Requests */}
       {pendingRequests.length > 0 && (
@@ -548,6 +501,26 @@ export default function ProfilePage() {
           <span className="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-1 rounded-lg">
             {friends.length}
           </span>
+        </div>
+        
+        {/* Invite Button Inside Card */}
+        <div className="p-3 border-b border-slate-700/50 bg-slate-700/10">
+          <button
+            onClick={handleCopyInviteLink}
+            className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-medium flex items-center justify-center gap-2 transition-all relative overflow-hidden border border-slate-600"
+          >
+            {showCopyFeedback ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span className="text-emerald-400 text-sm">Kopyalandı!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-4 h-4" />
+                <span className="text-sm">Davet Linkini Kopyala</span>
+              </>
+            )}
+          </button>
         </div>
         <div className="divide-y divide-slate-700/50 max-h-60 overflow-y-auto custom-scrollbar">
           {friends.length === 0 ? (
@@ -648,54 +621,12 @@ export default function ProfilePage() {
           <p className="text-sm text-slate-400">Google ile giriş yap</p>
         </div>
       </button>
-
-      <button className="w-full flex items-center gap-4 bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors">
-        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-          <Settings className="w-5 h-5 text-slate-400" />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-white font-medium">Ayarlar</p>
-          <p className="text-sm text-slate-400">Uygulama ayarları</p>
-        </div>
-      </button>
-
-      {/* Locked Features */}
-      <div className="w-full flex items-center gap-4 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 opacity-60">
-        <div className="w-10 h-10 rounded-full bg-slate-700/50 flex items-center justify-center relative">
-          <Trophy className="w-5 h-5 text-slate-500" />
-          <Lock className="w-3 h-3 text-slate-500 absolute -bottom-0.5 -right-0.5" />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-slate-400 font-medium">Başarılar</p>
-          <p className="text-sm text-slate-500">Giriş yapmanız gerekiyor</p>
-        </div>
-      </div>
     </div>
   );
 
   // Giriş yapmış kullanıcı için menü
   const renderAuthenticatedMenu = () => (
     <div className="space-y-3">
-      <button className="w-full flex items-center gap-4 bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors">
-        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-          <Settings className="w-5 h-5 text-slate-400" />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-white font-medium">Ayarlar</p>
-          <p className="text-sm text-slate-400">Uygulama ayarları</p>
-        </div>
-      </button>
-
-      <button className="w-full flex items-center gap-4 bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors">
-        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-          <Trophy className="w-5 h-5 text-slate-400" />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-white font-medium">Başarılar</p>
-          <p className="text-sm text-slate-400">Kazanılan rozetler</p>
-        </div>
-      </button>
-
       <button
         onClick={() => setShowLogoutConfirm(true)}
         className="w-full flex items-center gap-4 bg-slate-800 rounded-xl p-4 border border-red-900/30 hover:border-red-800/50 transition-colors"

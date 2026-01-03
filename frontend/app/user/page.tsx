@@ -210,7 +210,7 @@ function UserProfileContent() {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                     <div className="bg-slate-700/50 rounded-xl p-3 text-center">
                         <Trophy className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
                         <p className="text-xl font-bold text-white">{stats.trophies}</p>
@@ -224,12 +224,7 @@ function UserProfileContent() {
                     <div className="bg-slate-700/50 rounded-xl p-3 text-center">
                         <Diamond className="w-5 h-5 text-orange-400 mx-auto mb-1" />
                         <p className="text-xl font-bold text-white">{stats.stars}</p>
-                        <p className="text-xs text-slate-400">Yıldız</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-3 text-center">
-                        <Zap className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-                        <p className="text-xl font-bold text-white">{stats.currentLevel}</p>
-                        <p className="text-xs text-slate-400">Seviye</p>
+                        <p className="text-xs text-slate-400">Coin</p>
                     </div>
                 </div>
             </div>
