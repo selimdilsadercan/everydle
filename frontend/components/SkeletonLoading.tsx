@@ -5,7 +5,7 @@ import React from "react";
 // Games page content skeleton (without Header/AppBar)
 export function GamesPageSkeleton({ hideDaySwitcher = false }: { hideDaySwitcher?: boolean }) {
   return (
-    <main className="max-w-lg mx-auto">
+    <main className={hideDaySwitcher ? "max-w-lg mx-auto" : "max-w-lg mx-auto p-4" }> 
       {/* Week Selector Skeleton */}
       {!hideDaySwitcher && (
         <div className="mb-4">

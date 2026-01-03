@@ -137,9 +137,11 @@ interface BattleButtonProps {
   toUserId: string;
   toUsername: string;
   isOnline: boolean;
+  className?: string;
+  showText?: boolean;
 }
 
-export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsername, isOnline }: BattleButtonProps) {
+export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsername, isOnline, className, showText }: BattleButtonProps) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -203,7 +205,7 @@ export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsernam
       <button
         onClick={handleSendRequest}
         disabled={isSending || !isOnline}
-        className={`p-2 rounded-lg transition-all ${
+        className={className || `p-2 rounded-lg transition-all ${
           isOnline
             ? "bg-gradient-to-r from-orange-500/20 to-red-500/20 hover:from-orange-500/30 hover:to-red-500/30 text-orange-400"
             : "bg-slate-700/30 text-slate-600 cursor-not-allowed"
@@ -212,6 +214,11 @@ export function SendBattleButton({ fromUserId, fromUsername, toUserId, toUsernam
       >
         {isSending ? (
           <Loader2 className="w-4 h-4 animate-spin" />
+        ) : showText ? (
+          <div className="flex items-center gap-2">
+            <Swords className="w-4 h-4" />
+            <span>Dostluk Savaşı</span>
+          </div>
         ) : (
           <Swords className="w-4 h-4" />
         )}

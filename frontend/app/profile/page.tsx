@@ -78,6 +78,8 @@ export default function ProfilePage() {
   const [friendToRemove, setFriendToRemove] = useState<friendship.FriendUser | null>(null);
   const [openMenuFriendId, setOpenMenuFriendId] = useState<string | null>(null);
 
+  const router = useRouter();
+
   const { user, isAuthenticated, loading: authLoading, signOut } = useAuth();
   
   // Cihaz ID'sini al
@@ -554,7 +556,11 @@ export default function ProfilePage() {
             </div>
           ) : (
             friends.map((friend) => (
-              <div key={friend.id} className="p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
+              <div 
+                key={friend.id} 
+                className="p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors cursor-pointer"
+                onClick={() => router.push(`/user?id=${friend.id}`)}
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg relative">
                     {friend.avatar ? <img src={friend.avatar} className="w-full h-full rounded-full" /> : "👤"}
@@ -574,13 +580,15 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-1">
                   {/* Dostluk Savaşı Butonu */}
                   {backendUserId && backendUser?.username && (
-                    <SendBattleButton
-                      fromUserId={backendUserId}
-                      fromUsername={backendUser.username}
-                      toUserId={friend.id}
-                      toUsername={friend.username || "Arkadaş"}
-                      isOnline={friend.isOnline}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SendBattleButton
+                        fromUserId={backendUserId}
+                        fromUsername={backendUser.username}
+                        toUserId={friend.id}
+                        toUsername={friend.username || "Arkadaş"}
+                        isOnline={friend.isOnline}
+                      />
+                    </div>
                   )}
                   {/* Üç Nokta Menüsü */}
                   <div className="relative">

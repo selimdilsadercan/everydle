@@ -194,7 +194,9 @@ function getInProgressGamesForDate(date: Date): string[] {
   }
   
   // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
-  const moviedleSave = localStorage.getItem(`moviedle-game-${gameNumber}`);
+  // Moviedle başlangıç: 18 Aralık 2025, Wordle: 23 Kasım 2025. Fark: 25 gün.
+  const moviedleGameNumber = gameNumber > 25 ? gameNumber - 25 : 1;
+  const moviedleSave = localStorage.getItem(`moviedle-game-${moviedleGameNumber}`);
   if (moviedleSave) {
     try {
       const parsed = JSON.parse(moviedleSave);
@@ -284,7 +286,9 @@ function getLostGamesForDate(date: Date): string[] {
   // Redactle never loses, so skip
   
   // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
-  const moviedleLostSave = localStorage.getItem(`moviedle-game-${gameNumber}`);
+  // Moviedle başlangıç: 18 Aralık 2025, Wordle: 23 Kasım 2025. Fark: 25 gün.
+  const moviedleGameNumber = gameNumber > 25 ? gameNumber - 25 : 1;
+  const moviedleLostSave = localStorage.getItem(`moviedle-game-${moviedleGameNumber}`);
   if (moviedleLostSave) {
     try {
       const parsed = JSON.parse(moviedleLostSave);

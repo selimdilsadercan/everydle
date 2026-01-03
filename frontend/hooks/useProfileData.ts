@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { 
   getUserByFirebaseId, 
+  getUser,
   getUserStars, 
   getUserTrophies, 
   getUserInventory, 
@@ -43,6 +44,15 @@ export function useUserByFirebaseId(firebaseId: string | undefined) {
     queryFn: () => getUserByFirebaseId(firebaseId!),
     enabled: !!firebaseId,
     staleTime: Infinity, // User ID rarely changes
+  });
+}
+
+// 1.5 Get User by ID
+export function useUser(userId: string | undefined) {
+  return useQuery({
+    queryKey: QUERY_KEYS.user(userId || ""),
+    queryFn: () => getUser(userId!),
+    enabled: !!userId,
   });
 }
 
@@ -171,12 +181,18 @@ export function useUserMutations(userId: string | undefined) {
     },
   });
 
+  // Send Friend Request
+  const sendFriendRequestMutation = useMutation({
+    mutationFn: (friendId: string) => sendFriendRequest(userId!, friendId),
+  });
+
   return {
     createUser: createUserMutation,
     updateUser: updateUserMutation,
     acceptFriend: acceptFriendMutation,
     rejectFriend: rejectFriendMutation,
     removeFriend: removeFriendMutation,
+    sendFriendRequest: sendFriendRequestMutation,
   };
 }
 
