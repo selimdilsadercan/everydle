@@ -65,13 +65,13 @@ export default function AppBar({ currentPage }: AppBarProps) {
   const hasReward = !!(rewardInfo?.canClaim && (rewardInfo?.claimsToday || 0) === 0);
 
   // Get daily progress from backend
-  const { data: completedGames = [] } = useCompletedGamesForToday(backendUserId);
-  const dailyProgress = completedGames.length;
+  const { data: allDailyGames = [] } = useCompletedGamesForToday(backendUserId);
+  const dailyProgress = allDailyGames.filter(g => g.status === 'won' || g.status === 'lost').length;
 
   // Listen for daily progress updates (when game is completed)
   useDailyProgressListener(backendUserId);
 
-  const isActive = (page: PageType) => {
+  const isActive = (page: PageType) => {  
     return currentPage === page;
   };
 
