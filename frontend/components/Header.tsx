@@ -63,7 +63,7 @@ export default function Header() {
           {/* Logo - clickable to go to challenges */}
           <div className="relative">
             <Link
-              href="/challenge"
+              href="/games"
               className="flex text-lg font-black text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
               onClick={(e) => {
                 if (process.env.NODE_ENV === "development") {

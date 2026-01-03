@@ -26,8 +26,8 @@ import { formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
-import { useUserStats } from "@/hooks/useProfileData";
+import { markDailyGameCompleted, unmarkDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
+import { useUserStats, useDailyProgressListener } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
@@ -101,6 +101,9 @@ const Moviedle = () => {
   const { backendUserId } = useAuth();
   const mode = searchParams.get("mode"); // "levels" | "practice" | null
   const levelId = searchParams.get("levelId"); // Hangi level'dan gelindi
+  
+  // Listen for daily progress updates to refresh checkmarks
+  useDailyProgressListener(backendUserId || undefined);
 
   // Hint system
   const userStats = useUserStats(backendUserId || undefined);
@@ -141,6 +144,8 @@ const Moviedle = () => {
   const [dailyCompleted, setDailyCompleted] = useState(false);
   // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
   const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
+  // Günlük oyunun tarihini tutar (YYYY-MM-DD)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const isInitialMount = useRef(true);
   
   // Set isInitialMount to false after initial render
@@ -164,14 +169,19 @@ const Moviedle = () => {
     }
     // Günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
     if (gameState === "won" && mode !== "levels" && backendUserId && gameDay && !dailyCompleted && !isInitialMount.current) {
-      const completionDate = formatDate(new Date());
-      markDailyGameCompleted(backendUserId, "moviedle", gameDay, completionDate);
-      setDailyCompleted(true);
-      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+      const handleWin = async () => {
+        const completionDate = formatDate(new Date());
+        const gameDateValue = selectedDate || completionDate;
+        await markDailyGameCompleted(backendUserId, "moviedle", gameDay, completionDate, gameDateValue);
+        setDailyCompleted(true);
+        setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+        triggerDataRefresh();
+      };
+      handleWin();
     } else if (gameState === "lost" && mode !== "levels" && backendUserId && gameDay && !dailyCompleted && !isInitialMount.current) {
       setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
     }
-  }, [gameState, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted]);
+  }, [gameState, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted, selectedDate]);
 
   // Load completed games from backend (single efficient API call)
   useEffect(() => {
@@ -216,6 +226,7 @@ const Moviedle = () => {
         const dateParam = searchParams.get("date");
         const today = new Date().toISOString().split('T')[0];
         const targetDate = dateParam || today;
+        setSelectedDate(targetDate);
         
         // Hedef tarihin filmini bul
         const targetEntry = dailyData.daily_movies.find(entry => entry.date === targetDate);
@@ -408,8 +419,11 @@ const Moviedle = () => {
     setSearchQuery("");
   };
 
-  const resetGame = () => {
+  const resetGame = async () => {
     if (movies.length === 0) return;
+    
+    // Prevent immediate save effect during reset
+    isInitialMount.current = true;
     
     // If it's a daily game, just restart the current day
     if (gameDay) {
@@ -419,9 +433,15 @@ const Moviedle = () => {
       setRevealedActors([]);
       setNextActorIndex(0);
       setDailyCompleted(false);
+      setLevelCompleted(false);
       
       if (backendUserId) {
-        deleteGameState(backendUserId, "moviedle", gameDay);
+        await deleteGameState(backendUserId, "moviedle", gameDay);
+        await unmarkDailyGameCompleted(backendUserId, "moviedle", gameDay);
+
+        // Clear any potential stale localStorage for Games page
+        localStorage.removeItem(`moviedle-game-${gameDay}`);
+
         setGameStatusCache(prev => {
           const newCache = { ...prev };
           delete newCache[gameDay];
@@ -429,6 +449,10 @@ const Moviedle = () => {
         });
       }
       triggerDataRefresh();
+      
+      setTimeout(() => {
+        isInitialMount.current = false;
+      }, 500);
       return;
     }
 
@@ -440,6 +464,11 @@ const Moviedle = () => {
     setGameState("playing");
     setRevealedActors([]);
     setNextActorIndex(0);
+    setLevelCompleted(false);
+
+    setTimeout(() => {
+      isInitialMount.current = false;
+    }, 500);
   };
 
   const getYearRange = () => {

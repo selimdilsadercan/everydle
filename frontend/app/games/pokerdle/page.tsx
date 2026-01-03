@@ -7,12 +7,11 @@ import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Info, Calendar, Circle,
 import { LightBulbIcon } from "@heroicons/react/24/solid";
 import { getUserStars } from "@/lib/userStars";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
-import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
-import { useUserStats } from "@/hooks/useProfileData";
+import { unmarkDailyGameCompleted, markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState, getAllCompletedGames } from "@/app/games/actions";
+import { useUserStats, useDailyProgressListener } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
@@ -68,19 +67,38 @@ interface DailyHand {
 const FIRST_GAME_DATE = new Date(2025, 10, 23); // 23 Kasım 2025 (ay 0-indexed)
 const FIRST_GAME_NUMBER = 1;
 
-// Bugünkü oyun numarasını hesapla
-function getTodaysGameNumber(): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+// Tarihten oyun numarasını hesapla
+function getGameNumberFromDate(targetDate: Date): number {
+  const date = new Date(targetDate);
+  date.setHours(0, 0, 0, 0);
 
   const firstDate = new Date(FIRST_GAME_DATE);
   firstDate.setHours(0, 0, 0, 0);
 
   const daysDiff = Math.floor(
-    (today.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)
+    (date.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)
   );
 
   return FIRST_GAME_NUMBER + daysDiff;
+}
+
+// Bugünkü oyun numarasını hesapla
+function getTodaysGameNumber(): number {
+  return getGameNumberFromDate(new Date());
+}
+
+// String tarihten (YYYY-MM-DD) oyun numarası hesapla
+function getGameNumberFromDateStr(dateStr: string): number {
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return getTodaysGameNumber();
+  
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // months are 0-indexed
+  const day = parseInt(parts[2], 10);
+  
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return getTodaysGameNumber();
+  
+  return getGameNumberFromDate(new Date(year, month, day));
 }
 
 // Oyun numarasından güzel tarih formatı
@@ -100,29 +118,9 @@ function getFormattedDateFromGameNumber(gameNumber: number): string {
   return `${day} ${month}`;
 }
 
-// Levels modunda tamamlanmamış en son oyunu bul
+// Levels modunda tamamlanmamış en son oyunu bul (Backend tabanlı olduğu için başlangıç numarası döner, yükleme loadState içinde yapılır)
 function getNextUncompletedGame(): number {
-  const todayGame = getTodaysGameNumber();
-  
-  // Bugünden geriye doğru git, tamamlanmamış ilk oyunu bul
-  for (let gameNum = todayGame; gameNum >= 1; gameNum--) {
-    const saved = localStorage.getItem(`pokerdle-game-${gameNum}`);
-    if (!saved) {
-      return gameNum; // Hiç oynanmamış
-    }
-    try {
-      const parsed = JSON.parse(saved);
-      // Oyun kazanılmamış veya kaybedilmemişse bu oyunu döndür
-      if (!parsed.gameWon && !parsed.gameLost) {
-        return gameNum;
-      }
-    } catch (e) {
-      return gameNum; // Parse hatası varsa bu oyunu döndür
-    }
-  }
-  
-  // Tüm oyunlar tamamlandıysa bugünkü oyunu döndür
-  return todayGame;
+  return getTodaysGameNumber();
 }
 
 const Pokerdle = () => {
@@ -145,6 +143,29 @@ const Pokerdle = () => {
   const [showAnswerModal, setShowAnswerModal] = useState(false);
   const [selectedGuessIndex, setSelectedGuessIndex] = useState<number | null>(null);
   const [showConfirmHint, setShowConfirmHint] = useState(false);
+
+  // Listen for daily progress updates to refresh checkmarks
+  useDailyProgressListener(backendUserId || undefined);
+
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
+  
+  // Load completed games from backend (single efficient API call)
+  useEffect(() => {
+    if (!backendUserId) return;
+    
+    const loadCompletedGamesFromBackend = async () => {
+      const response = await getAllCompletedGames(backendUserId, "pokerdle", 50);
+      if (response.data?.success && response.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
+        response.data.games.forEach((g: any) => {
+          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+        });
+        setGameStatusCache(cache);
+      }
+    };
+    loadCompletedGamesFromBackend();
+  }, [backendUserId]);
 
   // Hint system states
   // Hint system states
@@ -178,30 +199,46 @@ const Pokerdle = () => {
     return statuses;
   })();
   
-  // Levels modunda tamamlanmamış en son oyunla başla
+  // Oyun numarasını belirle
   const [gameNumber, setGameNumber] = useState(() => {
+    const dateParam = searchParams.get("date");
+    if (mode === "days" && dateParam) {
+      return getGameNumberFromDateStr(dateParam);
+    }
     if (typeof window !== "undefined" && mode === "levels") {
       return getNextUncompletedGame();
     }
     return getTodaysGameNumber();
   });
 
-  // Joker ve coin değerlerini yükle (Local Storage fallback)
+  // URL değişikliklerini takip et
   useEffect(() => {
-    if (backendUserId) return; // Logged in users use hook
+    const dateParam = searchParams.get("date");
+    if (mode === "days" && dateParam) {
+      const newGameNum = getGameNumberFromDateStr(dateParam);
+      if (newGameNum !== gameNumber) {
+        setGameNumber(newGameNum);
+      }
+    }
+  }, [mode, searchParams, gameNumber]);
 
-    const savedHints = localStorage.getItem("everydle-hints");
-    if (savedHints) setLocalHints(parseInt(savedHints));
-    setLocalCoins(getUserStars());
-    
-    const handleStorageChange = () => {
-      const h = localStorage.getItem("everydle-hints");
-      if (h) setLocalHints(parseInt(h));
-      setLocalCoins(getUserStars());
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+  // Joker ve coin değerlerini yükle - Fallback başlangıç değerleri
+  useEffect(() => {
+    if (backendUserId) return; 
+    setLocalHints(3);
+    setLocalCoins(0);
   }, [backendUserId]);
+
+  // isInitialMount flag
+  const isInitialMount = useRef(true);
+  
+  // Set isInitialMount to false after initial render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isInitialMount.current = false;
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // İpucu kullanma fonksiyonu - rastgele bir pozisyonu açar
   const handleUseHint = async () => {
@@ -237,11 +274,9 @@ const Pokerdle = () => {
       // Ideally dispatch event to refresh stats
       triggerDataRefresh(); 
     } else {
-      // Local storage update
-      const newHintCount = localHints - 1;
-      localStorage.setItem("everydle-hints", newHintCount.toString());
-      setLocalHints(newHintCount);
-      triggerDataRefresh();
+      setMessage("Hint kullanmak için giriş yapın!");
+      setTimeout(() => setMessage(""), 2000);
+      return;
     }
     
     // Rastgele bir pozisyon seç
@@ -311,16 +346,9 @@ const Pokerdle = () => {
         }
       }
 
-      // 2. Try LocalStorage if Encore failed or not logged in
+      // 2. LocalStorage desteği kaldırıldı - tamamen backend merkezli
       if (!stateToLoad) {
-        const savedGame = localStorage.getItem(`pokerdle-game-${gameNumber}`);
-        if (savedGame) {
-          try {
-            stateToLoad = JSON.parse(savedGame);
-          } catch (e) {
-            console.error("Oyun verisi yüklenemedi:", e);
-          }
-        }
+        // ... starts fresh
       }
 
       // 3. Apply state
@@ -348,18 +376,17 @@ const Pokerdle = () => {
 
   // Save game state
   useEffect(() => {
-    if (!targetHand || isInitialMount.current) return;
-    
+    if (isInitialMount.current || !gameNumber) return;
+
+    // En az bir tahmin yapılmış mı kontrol et
+    if (guesses.length === 0) return;
+
     const savedState = {
-      gameNumber,
       guesses,
       gameWon: gameState === "won",
       gameLost: gameState === "lost",
       revealedHintPositions
     };
-
-    // Always save to localStorage regardless of game state
-    localStorage.setItem(`pokerdle-game-${gameNumber}`, JSON.stringify(savedState));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -372,27 +399,54 @@ const Pokerdle = () => {
         gameState === "won"
       );
     }
-  }, [gameNumber, guesses, gameState, targetHand, revealedHintPositions, backendUserId]);
+  }, [gameNumber, guesses, gameState, revealedHintPositions, backendUserId]);
 
-  // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
+  // dailyCompleted flag
   const [dailyCompleted, setDailyCompleted] = useState(false);
-  const isInitialMount = useRef(true);
-  
-  // Set isInitialMount to false after initial render
 
-  
-  // Oyun kazanıldığında günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
+  // Update current game status cache reactively based on guesses and state
+  useEffect(() => {
+    if (!gameNumber || !backendUserId) return;
+    
+    const hasGuesses = guesses.length > 0;
+    
+    if (gameState === "won") {
+      setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'won' }));
+    } else if (gameState === "lost") {
+      setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'lost' }));
+    } else if (hasGuesses) {
+      setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'playing' }));
+    } else {
+      // No guesses and not finished -> remove from playing/won/lost to show as not_played
+      setGameStatusCache(prev => {
+        if (prev[gameNumber]) {
+            const updated = { ...prev };
+            delete updated[gameNumber];
+            return updated;
+        }
+        return prev;
+      });
+    }
+  }, [guesses, gameState, gameNumber, backendUserId]);
+
+  // Oyun kazanıldığında günlük tamamlamayı veritabanına kaydet
   useEffect(() => {
     if (gameState === "won" && backendUserId && !dailyCompleted && !isInitialMount.current) {
-      // Calculate date for this game number
-      const daysDiff = gameNumber - FIRST_GAME_NUMBER;
-      const gameDate = new Date(FIRST_GAME_DATE);
-      gameDate.setDate(gameDate.getDate() + daysDiff);
-      
-      const completionDate = formatDate(gameDate);
-      markDailyGameCompleted(backendUserId, "pokerdle", gameNumber, completionDate);
-      setDailyCompleted(true);
-      triggerDataRefresh(); // Games listesi cache'ini yenile
+      const handleWinAction = async () => {
+        const { formatDate: formatDateLib } = await import("@/lib/dailyCompletion");
+        // Calculate date for this game number
+        const daysDiff = gameNumber - FIRST_GAME_NUMBER;
+        const gameDate = new Date(FIRST_GAME_DATE);
+        gameDate.setDate(gameDate.getDate() + daysDiff);
+        
+        const completionDate = formatDateLib(new Date()); // Completed today
+        const gameDateValue = formatDateLib(gameDate);    // Date of the game
+        
+        await markDailyGameCompleted(backendUserId, "pokerdle", gameNumber, completionDate, gameDateValue);
+        setDailyCompleted(true);
+        triggerDataRefresh();
+      };
+      handleWinAction();
     }
   }, [gameState, gameNumber, backendUserId, dailyCompleted]);
 
@@ -538,8 +592,10 @@ const Pokerdle = () => {
     }
   };  
 
-  const resetGame = () => {
-    // Hedef eli değiştirme - sadece tahminleri ve oyun durumunu sıfırla
+  const resetGame = async () => {
+    // Prevent immediate save effect during reset
+    isInitialMount.current = true;
+
     setGuesses([]);
     setSelectedCards([]);
     setRevealedHintPositions([]);
@@ -547,20 +603,26 @@ const Pokerdle = () => {
     setMessage("");
     setDailyCompleted(false);
     
-    // localStorage'dan bu oyunu temizle
-    localStorage.removeItem(`pokerdle-game-${gameNumber}`);
-    
-    // Calculate date for this game number to unmark
-    const daysDiff = gameNumber - FIRST_GAME_NUMBER;
-    const gameDate = new Date(FIRST_GAME_DATE);
-    gameDate.setDate(gameDate.getDate() + daysDiff);
-    
-    const year = gameDate.getFullYear();
-    const month = String(gameDate.getMonth() + 1).padStart(2, '0');
-    const day = String(gameDate.getDate()).padStart(2, '0');
-    const dateFormatted = `${year}-${month}-${day}`;
-    
-    unmarkGameCompleted("pokerdle", dateFormatted);
+    // Backend reset if logged in
+    if (backendUserId && gameNumber) {
+      await deleteGameState(backendUserId, "pokerdle", gameNumber);
+      await unmarkDailyGameCompleted(backendUserId, "pokerdle", gameNumber);
+      
+      // Clear any potential stale localStorage for Games page
+      localStorage.removeItem(`pokerdle-game-${gameNumber}`);
+
+      setGameStatusCache(prev => {
+        const updated = { ...prev };
+        delete updated[gameNumber];
+        return updated;
+      });
+      
+      triggerDataRefresh();
+    }
+
+    setTimeout(() => {
+      isInitialMount.current = false;
+    }, 1000);
   };
 
   const getCardColor = (state: CardState) => {
@@ -1570,17 +1632,7 @@ const Pokerdle = () => {
                 const games = [];
                 
                 for (let gNum = todayNum; gNum >= Math.max(1, todayNum - 30); gNum--) {
-                  const savedGame = localStorage.getItem(`pokerdle-game-${gNum}`);
-                  let status: "won" | "lost" | "not-played" = "not-played";
-                  
-                  if (savedGame) {
-                    try {
-                      const parsed = JSON.parse(savedGame);
-                      if (parsed.gameWon) status = "won";
-                      else if (parsed.gameLost) status = "lost";
-                      else if (parsed.guesses && parsed.guesses.length > 0) status = "not-played"; // In progress
-                    } catch {}
-                  }
+                  const status = gameStatusCache[gNum] || 'not_played';
                   
                   const isToday = gNum === todayNum;
                   const isCurrent = gNum === gameNumber;
@@ -1590,6 +1642,14 @@ const Pokerdle = () => {
                     <button
                       key={gNum}
                       onClick={() => {
+                        const daysDiff = gNum - FIRST_GAME_NUMBER;
+                        const gameDate = new Date(FIRST_GAME_DATE);
+                        gameDate.setDate(gameDate.getDate() + daysDiff);
+                        const year = gameDate.getFullYear();
+                        const month = String(gameDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(gameDate.getDate()).padStart(2, '0');
+                        
+                        router.push(`/games/pokerdle?mode=days&date=${year}-${month}-${day}`);
                         setGameNumber(gNum);
                         setShowPreviousGames(false);
                       }}
@@ -1601,9 +1661,17 @@ const Pokerdle = () => {
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-slate-400 text-sm w-8">#{gNum}</span>
-                        <span className="font-medium">
-                          {isToday ? "Bugün" : formattedDate}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {isToday ? "Bugün" : formattedDate}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                            {status === "won" && <span className="text-emerald-400">Kazanıldı</span>}
+                            {status === "lost" && <span className="text-red-400">Kaybedildi</span>}
+                            {status === "playing" && <span className="text-yellow-400">Devam Ediyor</span>}
+                            {status === "not_played" && <span className="text-slate-500">Oynanmadı</span>}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         {status === "won" && (
@@ -1612,7 +1680,12 @@ const Pokerdle = () => {
                         {status === "lost" && (
                           <Circle className="w-5 h-5 text-red-500 fill-red-500" />
                         )}
-                        {status === "not-played" && (
+                        {status === "playing" && (
+                           <div className="w-5 h-5 rounded-full border-2 border-yellow-500 flex items-center justify-center text-yellow-500">
+                             <span className="text-[10px] font-bold">...</span>
+                           </div>
+                        )}
+                        {status === "not_played" && (
                           <Circle className="w-5 h-5 text-slate-500" />
                         )}
                       </div>

@@ -5,13 +5,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Diamond, ArrowBigRight, Check } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
-import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { triggerDataRefresh } from "@/components/Header";
 import { formatDate } from "@/lib/dailyCompletion";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
 import { markDailyGameCompleted, unmarkDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
-import { useUserStats } from "@/hooks/useProfileData";
+import { useUserStats, useDailyProgressListener } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
@@ -57,6 +56,9 @@ const Quordle = () => {
   const { backendUserId } = useAuth();
   const mode = searchParams.get("mode"); // "levels" | "practice" | null
   const levelId = searchParams.get("levelId"); // Hangi level'dan gelindi
+
+  // Listen for daily progress updates to refresh checkmarks
+  useDailyProgressListener(backendUserId || undefined);
 
   const [allWords, setAllWords] = useState<string[]>([]); // Tüm geçerli kelimeler (tahmin doğrulama)
   const [targetWords, setTargetWords] = useState<string[]>([]); // Hedef kelime havuzu
@@ -461,9 +463,6 @@ const Quordle = () => {
     const allWon = games.length === 4 && games.every((g) => g.gameState === "won");
     if (allWon && mode === "levels" && levelId && !levelCompleted) {
       const lid = parseInt(levelId);
-      // Yerel tamamla
-      completeLevelLocal(lid);
-      
       // Backend tamamla
       if (backendUserId) {
         completeLevelBackend(backendUserId, lid);
@@ -473,15 +472,19 @@ const Quordle = () => {
     }
     // Günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
     if (allWon && mode !== "levels" && backendUserId && gameDay && !dailyCompleted && !dailyInitialMount.current) {
-      // completionDate: Kullanıcının oyunu tamamladığı an (bugün)
-      const completionDate = formatDate(new Date());
-      // gameDate: Oyunun hangi güne ait olduğu
-      const gameDateValue = selectedDate ? formatDate(parseDate(selectedDate)) : completionDate;
-      markDailyGameCompleted(backendUserId, "quordle", gameDay, completionDate, gameDateValue);
-      setDailyCompleted(true);
-      triggerDataRefresh();
+      const handleWin = async () => {
+        // completionDate: Kullanıcının oyunu tamamladığı an (bugün)
+        const completionDate = formatDate(new Date());
+        // gameDate: Oyunun hangi güne ait olduğu
+        const gameDateValue = selectedDate ? formatDate(parseDate(selectedDate)) : completionDate;
+        await markDailyGameCompleted(backendUserId, "quordle", gameDay, completionDate, gameDateValue);
+        setDailyCompleted(true);
+        setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+        triggerDataRefresh();
+      };
+      handleWin();
     }
-  }, [games, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted]);
+  }, [games, mode, levelId, levelCompleted, backendUserId, gameDay, dailyCompleted, selectedDate]);
 
   // Oyun bittiğinde yukarı scroll yap
   useEffect(() => {
@@ -690,23 +693,25 @@ const Quordle = () => {
     return "bg-slate-600 text-slate-200";
   };
 
-  const resetGame = () => {
-    // Geçerli olan günün kelimelerini belirle
-    const dateStr = selectedDate || getTodayFormatted();
-    const entry = dailyEntries.find(e => e.date === dateStr);
-    
+  const resetGame = async () => {
+    // Prevent immediate save effect during reset
+    isInitialMount.current = true;
+
     let selectedWords: string[] = [];
-    if (entry && entry.words.length === 4) {
-      selectedWords = entry.words.map(w => toTurkishUpperCase(w));
-    } else {
-      if (targetWords.length === 0) return;
-      const usedIndices = new Set<number>();
-      while (selectedWords.length < 4) {
-        const randomIndex = Math.floor(Math.random() * targetWords.length);
-        if (!usedIndices.has(randomIndex)) {
-          usedIndices.add(randomIndex);
-          selectedWords.push(targetWords[randomIndex]);
-        }
+    
+    // Günlük kelimeleri al (mevcut tarihe göre)
+    if (gameDay && dailyEntries.length > 0) {
+      const entry = dailyEntries[gameDay - 1];
+      if (entry) {
+        selectedWords = entry.words.map(w => toTurkishUpperCase(w));
+      }
+    }
+
+    // Eğer günlük mod değilse veya kelime bulunamadıysa rastgele seç
+    if (selectedWords.length !== 4) {
+      if (dailyEntries.length > 0) {
+        const randomEntry = dailyEntries[Math.floor(Math.random() * dailyEntries.length)];
+        selectedWords = randomEntry.words.map(w => toTurkishUpperCase(w));
       }
     }
 
@@ -721,15 +726,20 @@ const Quordle = () => {
     setRevealedHints([[], [], [], []]);
     setHintLetters({});
     setMessage("");
+    setDailyCompleted(false);
+    setLevelCompleted(false);
     
     // Delete from backend if logged in
     if (backendUserId && gameDay) {
       // Delete gamestate
-      deleteGameState(backendUserId, "quordle", gameDay);
+      await deleteGameState(backendUserId, "quordle", gameDay);
       
       // Also unmark from daily completed (removes checkmark from games page)
-      unmarkDailyGameCompleted(backendUserId, "quordle", gameDay);
+      await unmarkDailyGameCompleted(backendUserId, "quordle", gameDay);
       
+      // Clear any potential stale localStorage for Games page
+      localStorage.removeItem(`quordle-game-${gameDay}`);
+
       // Update modal cache - remove this game from completed/playing status
       setGameStatusCache(prev => {
         const updated = { ...prev };
@@ -740,6 +750,10 @@ const Quordle = () => {
       // Trigger data refresh for games page
       triggerDataRefresh();
     }
+
+    setTimeout(() => {
+      isInitialMount.current = false;
+    }, 500);
   };
 
   if (games.length === 0 || allWords.length === 0) {

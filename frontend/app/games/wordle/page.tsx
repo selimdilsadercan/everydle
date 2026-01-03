@@ -25,8 +25,8 @@ import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { getUserStars } from "@/lib/userStars";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
-import { useUserStats } from "@/hooks/useProfileData";
+import { markDailyGameCompleted, unmarkDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState, getAllCompletedGames } from "@/app/games/actions";
+import { useUserStats, useDailyProgressListener } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 
 type LetterState = "correct" | "present" | "absent" | "empty";
@@ -84,34 +84,7 @@ function getFormattedDateFromGameNumber(gameNumber: number): string {
 
 // En son oynanan oyun numarasını bul
 function getLastPlayedGameNumber(): number | null {
-  if (typeof window === "undefined") return null;
-
-  let lastPlayedGame: number | null = null;
-  const todayGameNumber = getTodaysGameNumber();
-
-  for (let i = 0; i <= 365; i++) {
-    const gameNum = todayGameNumber - i;
-    if (gameNum < FIRST_GAME_NUMBER) break;
-
-    const saved = localStorage.getItem(`wordle-game-${gameNum}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (
-          (parsed.guesses && parsed.guesses.length > 0) ||
-          parsed.gameWon ||
-          parsed.gameLost
-        ) {
-          lastPlayedGame = gameNum;
-          break;
-        }
-      } catch (e) {
-        // Hata durumunda devam et
-      }
-    }
-  }
-
-  return lastPlayedGame;
+  return getTodaysGameNumber();
 }
 
 // Oyun numarasına göre deterministik kelime seç
@@ -125,25 +98,6 @@ function getWordForGame(gameNumber: number, words: string[]): string {
 // Levels modunda tamamlanmamış en son oyunu bul
 function getNextUncompletedGame(): number {
   const todayGame = getTodaysGameNumber();
-  
-  // Bugünden geriye doğru git, tamamlanmamış ilk oyunu bul
-  for (let gameNum = todayGame; gameNum >= 1; gameNum--) {
-    const saved = localStorage.getItem(`wordle-game-${gameNum}`);
-    if (!saved) {
-      return gameNum; // Hiç oynanmamış
-    }
-    try {
-      const parsed = JSON.parse(saved);
-      // Oyun kazanılmamış veya kaybedilmemişse bu oyunu döndür
-      if (!parsed.gameWon && !parsed.gameLost) {
-        return gameNum;
-      }
-    } catch (e) {
-      return gameNum; // Parse hatası varsa bu oyunu döndür
-    }
-  }
-  
-  // Tüm oyunlar tamamlandıysa bugünkü oyunu döndür
   return todayGame;
 }
 
@@ -153,6 +107,9 @@ const Wordle = () => {
   const { backendUserId } = useAuth();
   const mode = searchParams.get("mode"); // "levels" | "practice" | null
   const levelId = searchParams.get("levelId"); // Hangi level'dan gelindi
+  
+  // Listen for daily progress updates to refresh checkmarks
+  useDailyProgressListener(backendUserId || undefined);
   
   const [allWords, setAllWords] = useState<string[]>([]); // Tüm geçerli kelimeler (tahmin doğrulama)
   const [targetWords, setTargetWords] = useState<string[]>([]); // Hedef kelime havuzu
@@ -187,25 +144,12 @@ const Wordle = () => {
   const skips = backendUserId ? backendSkips : localSkips;
   const coins = backendUserId ? backendCoins : localCoins;
   
-  // Joker ve coin değerlerini yükle (Local Storage fallback)
+  // Joker ve coin değerlerini yükle
   useEffect(() => {
-    if (backendUserId) return; // Logged in users use hook
-    
-    const savedHints = localStorage.getItem("everydle-hints");
-    const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setLocalHints(parseInt(savedHints));
-    if (savedSkips) setLocalSkips(parseInt(savedSkips));
-    setLocalCoins(getUserStars());
-    
-    const handleStorageChange = () => {
-      const h = localStorage.getItem("everydle-hints");
-      const s = localStorage.getItem("everydle-giveups");
-      if (h) setLocalHints(parseInt(h));
-      if (s) setLocalSkips(parseInt(s));
-      setLocalCoins(getUserStars());
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    if (backendUserId) return;
+    setLocalHints(3);
+    setLocalSkips(1);
+    setLocalCoins(0);
   }, [backendUserId]);
   
   // İpucu kullanma fonksiyonu
@@ -239,10 +183,8 @@ const Wordle = () => {
       }
       triggerDataRefresh();
     } else {
-      // Local storage update
-      const newHintCount = localHints - 1;
-      localStorage.setItem("everydle-hints", newHintCount.toString());
-      setLocalHints(newHintCount);
+      // Local decrement (temporary)
+      setLocalHints(prev => prev - 1);
       triggerDataRefresh();
     }
     
@@ -316,8 +258,10 @@ const Wordle = () => {
     }
   }, [gameState, mode, levelId, levelCompleted, backendUserId]);
 
-  // dailyCompleted flag - localStorage'dan yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
+  // dailyCompleted flag - backend'den yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
   const dailyInitialMount = useRef(true);
   
   // Set dailyInitialMount to false after initial render
@@ -331,13 +275,21 @@ const Wordle = () => {
   // Oyun kazanıldığında günlük tamamlamayı işaretle (tüm modlarda) - sadece yeni kazanılan oyunlar için
   useEffect(() => {
     if (gameState === "won" && backendUserId && !dailyCompleted && !dailyInitialMount.current) {
-      // Days modunda URL'deki tarihi kullan, yoksa bugünü kullan
-      const dateParam = searchParams.get("date");
-      const completionDate = mode === "days" && dateParam ? dateParam : formatDate(new Date());
-      
-      // Backend'e günlük tamamlamayı kaydet
-      markDailyGameCompleted(backendUserId, "wordle", gameNumber, completionDate);
-      setDailyCompleted(true);
+      const handleWin = async () => {
+        // Days modunda URL'deki tarihi kullan, yoksa bugünü kullan
+        const dateParam = searchParams.get("date");
+        const completionDate = formatDate(new Date());
+        const gameDateValue = mode === "days" && dateParam ? dateParam : completionDate;
+        
+        // Backend'e günlük tamamlamayı kaydet
+        await markDailyGameCompleted(backendUserId, "wordle", gameNumber, completionDate, gameDateValue);
+        setDailyCompleted(true);
+        setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'won' }));
+        triggerDataRefresh();
+      };
+      handleWin();
+    } else if (gameState === "lost" && backendUserId && !dailyCompleted && !dailyInitialMount.current) {
+      setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'lost' }));
     }
   }, [gameState, mode, searchParams, backendUserId, gameNumber, dailyCompleted]);
 
@@ -477,7 +429,7 @@ const Wordle = () => {
     const loadState = async () => {
       let stateToLoad = null;
 
-      // 1. Try Encore first if logged in
+      // Try Encore
       if (backendUserId) {
         const response = await getEncoreGameState(backendUserId, "wordle", gameNumber);
         if (response.data?.success && response.data.data) {
@@ -485,26 +437,14 @@ const Wordle = () => {
         }
       }
 
-      // 2. Try LocalStorage if Encore failed or not logged in
-      if (!stateToLoad) {
-        const savedGame = localStorage.getItem(`wordle-game-${gameNumber}`);
-        if (savedGame) {
-          try {
-            stateToLoad = JSON.parse(savedGame);
-          } catch (e) {
-            console.error("Oyun verisi yüklenemedi:", e);
-          }
-        }
-      }
-
-      // 3. Apply state
+      // Apply state
       if (stateToLoad) {
         setGuesses(stateToLoad.guesses || []);
         setGameState(
           stateToLoad.gameWon ? "won" : stateToLoad.gameLost ? "lost" : "playing"
         );
         setCurrentGuess(stateToLoad.currentGuess || "");
-        setRevealedHints(stateToLoad.revealedHints || []); // Kaydedilmiş ipucuları yükle
+        setRevealedHints(stateToLoad.revealedHints || []); 
       }
 
       setTimeout(() => {
@@ -513,7 +453,32 @@ const Wordle = () => {
     };
 
     loadState();
-  }, [gameNumber, allWords, targetWords, backendUserId]);
+  }, [gameNumber, backendUserId]);
+
+  // Load completed games from backend
+  useEffect(() => {
+    if (!backendUserId) return;
+    
+    const loadCompletedGames = async () => {
+      const response = await getAllCompletedGames(backendUserId, "wordle");
+      if (response.data?.success && response.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        response.data.games.forEach(game => {
+          if (game.game_number) {
+            cache[game.game_number] = 'won';
+          }
+        });
+        setGameStatusCache(prev => ({ ...prev, ...cache }));
+      }
+    };
+    loadCompletedGames();
+  }, [backendUserId]);
+
+  // Update current game status in cache when guesses are made
+  useEffect(() => {
+    if (!gameNumber || guesses.length === 0 || gameState !== "playing") return;
+    setGameStatusCache(prev => ({ ...prev, [gameNumber]: 'playing' }));
+  }, [guesses, gameNumber, gameState]);
 
   // Oyun durumunu kaydet
   useEffect(() => {
@@ -532,9 +497,6 @@ const Wordle = () => {
         currentGuess,
         revealedHints, // İpucu ile açılan harfleri kaydet
       };
-
-      // Always save to localStorage regardless of game state
-      localStorage.setItem(`wordle-game-${gameNumber}`, JSON.stringify(savedState));
 
       // Save to Encore if logged in
       if (backendUserId) {
@@ -809,15 +771,30 @@ const Wordle = () => {
                       </button>
                       <button
                         className="w-full px-4 py-3 text-left hover:bg-slate-700 hover:mx-2 hover:rounded-md transition-all flex items-center gap-3 border-t border-slate-700 mt-1"
-                        onClick={() => {
-                          localStorage.removeItem(`wordle-game-${gameNumber}`);
+                        onClick={async () => {
+                          isInitialMount.current = true;
                           setGuesses([]);
                           setGameState("playing");
                           setCurrentGuess("");
                           setMessage("");
                           setRevealedHints([]);
-                          unmarkGameCompleted("wordle");
+                          setDailyCompleted(false);
+                          
+                          if (backendUserId) {
+                            await deleteGameState(backendUserId, "wordle", gameNumber);
+                            await unmarkDailyGameCompleted(backendUserId, "wordle", gameNumber);
+                            setGameStatusCache(prev => {
+                              const newCache = { ...prev };
+                              delete newCache[gameNumber];
+                              return newCache;
+                            });
+                            triggerDataRefresh();
+                          }
+                          
                           setShowMenu(false);
+                          setTimeout(() => {
+                            isInitialMount.current = false;
+                          }, 500);
                         }}
                       >
                         <RotateCcw className="w-5 h-5" />
@@ -1115,6 +1092,7 @@ const Wordle = () => {
         <PreviousGamesModal
           isOpen={showPreviousGames}
           onClose={() => setShowPreviousGames(false)}
+          gameStatusCache={gameStatusCache}
           onSelectGame={(selectedGameNumber) => {
             setGameNumber(selectedGameNumber);
           }}

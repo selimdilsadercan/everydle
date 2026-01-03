@@ -3,16 +3,13 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Map, Calendar, X, Diamond, ArrowBigRight } from "lucide-react";
+import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Map, Calendar, X, Diamond, ArrowBigRight, Check } from "lucide-react";
 import { LightBulbIcon } from "@heroicons/react/24/solid";
-import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
-import { getUserStars } from "@/lib/userStars";
-import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { completeLevel as completeLevelBackend } from "@/app/levels/actions";
-import { markDailyGameCompleted, saveGameState, getGameState as getEncoreGameState } from "@/app/games/actions";
-import { useUserStats } from "@/hooks/useProfileData";
+import { markDailyGameCompleted, unmarkDailyGameCompleted, saveGameState, getGameState as getEncoreGameState, deleteGameState } from "@/app/games/actions";
+import { useUserStats, useDailyProgressListener } from "@/hooks/useProfileData";
 import { useHint } from "@/app/store/actions";
 import ConfirmJokerModal from "@/components/ConfirmJokerModal";
 
@@ -60,6 +57,31 @@ const Nerdle = () => {
   const mode = searchParams.get("mode"); // "levels" | "practice" | null
   const levelId = searchParams.get("levelId"); // Hangi level'dan gelindi
 
+  // Listen for daily progress updates to refresh checkmarks
+  useDailyProgressListener(backendUserId || undefined);
+
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
+  
+  // Load completed games from backend (single efficient API call)
+  useEffect(() => {
+    if (!backendUserId) return;
+    
+    const loadCompletedGames = async () => {
+      const { getAllCompletedGames } = await import("@/app/games/actions");
+      
+      const response = await getAllCompletedGames(backendUserId, "nerdle", 50);
+      if (response.data?.success && response.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        response.data.games.forEach((g: any) => {
+          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+        });
+        setGameStatusCache(cache);
+      }
+    };
+    loadCompletedGames();
+  }, [backendUserId]);
+
   const [equations, setEquations] = useState<DailyEquation[]>([]);
   const [targetEquation, setTargetEquation] = useState("");
   const [targetDisplay, setTargetDisplay] = useState("");
@@ -94,25 +116,14 @@ const Nerdle = () => {
   const skips = backendUserId ? backendSkips : localSkips;
   const coins = backendUserId ? backendCoins : localCoins;
 
-  // Joker ve coin değerlerini yükle (Local Storage fallback)
+  // Joker ve coin değerlerini yükle (Local Storage fallback kaldırıldı - sadece backend)
   useEffect(() => {
-    if (backendUserId) return; // Logged in users use hook
+    if (backendUserId) return; 
     
-    const savedHints = localStorage.getItem("everydle-hints");
-    const savedSkips = localStorage.getItem("everydle-giveups");
-    if (savedHints) setLocalHints(parseInt(savedHints));
-    if (savedSkips) setLocalSkips(parseInt(savedSkips));
-    setLocalCoins(getUserStars());
-    
-    const handleStorageChange = () => {
-      const h = localStorage.getItem("everydle-hints");
-      const s = localStorage.getItem("everydle-giveups");
-      if (h) setLocalHints(parseInt(h));
-      if (s) setLocalSkips(parseInt(s));
-      setLocalCoins(getUserStars());
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    // Giriş yapmamış kullanıcılar için basit başlangıç değerleri
+    setLocalHints(3);
+    setLocalSkips(1);
+    setLocalCoins(0);
   }, [backendUserId]);
 
   // İpucu kullanma fonksiyonu
@@ -146,11 +157,10 @@ const Nerdle = () => {
       }
       triggerDataRefresh();
     } else {
-      // Local storage update
-      const newHintCount = localHints - 1;
-      localStorage.setItem("everydle-hints", newHintCount.toString());
-      setLocalHints(newHintCount);
-      triggerDataRefresh();
+      // Entry yapmamış kullanıcılar hint kullanamaz veya sınırlı kullanım
+      setMessage("Hint kullanmak için giriş yapın!");
+      setTimeout(() => setMessage(""), 2000);
+      return;
     }
     
     // Rastgele bir pozisyon seç
@@ -177,8 +187,6 @@ const Nerdle = () => {
   useEffect(() => {
     if (gameState === "won" && mode === "levels" && levelId && !levelCompleted) {
       const lid = parseInt(levelId);
-      // Yerel tamamla
-      completeLevelLocal(lid);
       
       // Backend tamamla
       if (backendUserId) {
@@ -189,12 +197,44 @@ const Nerdle = () => {
     }
   }, [gameState, mode, levelId, levelCompleted, backendUserId]);
 
-  // Oyun kazanıldığında günlük tamamlamayı veritabanına kaydet - sadece yeni kazanılan oyunlar için
+  // Update current game status cache reactively based on guesses and state
+  useEffect(() => {
+    if (!gameDay || !backendUserId) return;
+    
+    const hasGuesses = guesses.length > 0;
+    
+    if (gameState === "won") {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'won' }));
+    } else if (gameState === "lost") {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'lost' }));
+    } else if (hasGuesses) {
+      setGameStatusCache(prev => ({ ...prev, [gameDay]: 'playing' }));
+    } else {
+      // No guesses and not finished -> remove from playing/won/lost to show as not_played
+      setGameStatusCache(prev => {
+        if (prev[gameDay]) {
+            const updated = { ...prev };
+            delete updated[gameDay];
+            return updated;
+        }
+        return prev;
+      });
+    }
+  }, [guesses, gameState, gameDay, backendUserId]);
+
+  // Oyun kazanıldığında günlük tamamlamayı veritabanına kaydet
   useEffect(() => {
     if (gameState === "won" && backendUserId && gameDay && !dailyCompleted && !isInitialMount.current) {
-      const completionDate = selectedDate ? formatDate(parseDate(selectedDate)) : formatDate(new Date());
-      markDailyGameCompleted(backendUserId, "nerdle", gameDay, completionDate);
-      setDailyCompleted(true);
+      const handleWin = async () => {
+        const { formatDate } = await import("@/lib/dailyCompletion");
+        const completionDate = formatDate(new Date());
+        const gameDateValue = selectedDate ? formatDate(parseDate(selectedDate)) : completionDate;
+        
+        await markDailyGameCompleted(backendUserId, "nerdle", gameDay, completionDate, gameDateValue);
+        setDailyCompleted(true);
+        triggerDataRefresh();
+      };
+      handleWin();
     }
   }, [gameState, selectedDate, backendUserId, gameDay, dailyCompleted]);
 
@@ -273,16 +313,9 @@ const Nerdle = () => {
         }
       }
 
-      // 2. Try LocalStorage if Encore failed or not logged in
+      // 2. LocalStorage desteği kaldırıldı - tamamen backend merkezli
       if (!stateToLoad) {
-        const saved = localStorage.getItem(`nerdle-game-${gameDay}`);
-        if (saved) {
-          try {
-            stateToLoad = JSON.parse(saved);
-          } catch (e) {
-            console.error("Oyun verisi yüklenemedi:", e);
-          }
-        }
+        // ... backend failed or not logged in, starts fresh
       }
 
       // 3. Apply state
@@ -306,15 +339,17 @@ const Nerdle = () => {
       return;
     }
 
+    // En az bir tahmin yapılmış mı kontrol et
+    if (guesses.length === 0) {
+      return; // Hiç tahmin yoksa kaydetme
+    }
+
     const isFinished = gameState !== "playing";
     const stateToSave = {
       guesses,
       gameState,
       revealedHints
     };
-
-    // Always save to localStorage regardless of game state
-    localStorage.setItem(`nerdle-game-${gameDay}`, JSON.stringify(stateToSave));
 
     // Save to Encore if logged in
     if (backendUserId) {
@@ -531,26 +566,51 @@ const Nerdle = () => {
     }
   };
 
-  const resetGame = () => {
+  const resetGame = async () => {
     if (equations.length === 0) return;
-    const randomEq = equations[Math.floor(Math.random() * equations.length)];
-    setTargetEquation(randomEq.equation);
-    setTargetDisplay(getDisplayFormat(randomEq.equation));
+    
+    // Prevent immediate save effect during reset
+    isInitialMount.current = true;
+
+    // Hedef denklemi yeniden belirle (Seçili tarih varsa o günün denklemini, yoksa bugünkü veya rastgele)
+    const targetDate = selectedDate || getTodayFormatted();
+    const entry = equations.find(e => e.date === targetDate);
+    
+    if (entry) {
+      setTargetEquation(entry.equation);
+      setTargetDisplay(getDisplayFormat(entry.equation));
+    }
+
     setGuesses([]);
     setCurrentGuess("");
     setGameState("playing");
     setMessage("");
-    setGameDay(null);
-    setSelectedDate(null);
+    setDailyCompleted(false);
+    setLevelCompleted(false);
     setRevealedHints([]);
     
-    // Tamamlamayı geri al
-    if (selectedDate) {
-      const dateObj = parseDate(selectedDate);
-      unmarkGameCompleted("nerdle", formatDate(dateObj));
-    } else {
-      unmarkGameCompleted("nerdle");
+    // Backend reset if logged in
+    if (backendUserId && gameDay) {
+      await deleteGameState(backendUserId, "nerdle", gameDay);
+      await unmarkDailyGameCompleted(backendUserId, "nerdle", gameDay);
+      
+      // Clear any potential stale localStorage for Games page
+      localStorage.removeItem(`nerdle-game-${gameDay}`);
+      const targetDateStr = selectedDate || getTodayFormatted();
+      localStorage.removeItem(`nerdle-game-${targetDateStr}`);
+
+      setGameStatusCache(prev => {
+        const updated = { ...prev };
+        delete updated[gameDay];
+        return updated;
+      });
+      
+      triggerDataRefresh();
     }
+
+    setTimeout(() => {
+      isInitialMount.current = false;
+    }, 1000);
   };
 
   // Belirli bir tarihin denklemini oyna
@@ -650,20 +710,50 @@ const Nerdle = () => {
                   .map((eq) => {
                     const isToday = eq.date === getTodayFormatted();
                     const isSelected = eq.date === selectedDate;
+                    const gameNumber = equations.findIndex(e => e.date === eq.date) + 1;
+                    const status = gameStatusCache[gameNumber] || 'not_played';
+
                     return (
                       <button
                         key={eq.date}
                         onClick={() => playDate(eq.date)}
-                        className={`w-full px-3 py-2.5 rounded-lg text-left transition-colors flex items-center justify-between text-sm ${
+                        className={`w-full px-3 py-2.5 rounded-lg text-left transition-colors flex items-center justify-between group ${
                           isSelected 
-                            ? "bg-emerald-600 text-white" 
-                            : isToday 
-                              ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500" 
-                              : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                            ? 'bg-blue-900/50 border-2 border-blue-500 hover:bg-blue-900/70' 
+                            : 'bg-slate-700 hover:bg-slate-600'
                         }`}
                       >
-                        <span className="font-medium">{eq.date}</span>
-                        {isToday && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded">Bugün</span>}
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 flex items-center justify-center">
+                            {status === "won" && (
+                                <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-slate-900">
+                                    <Check className="w-3 h-3" />
+                                </div>
+                            )}
+                            {status === "lost" && (
+                                <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white">
+                                    <X className="w-3 h-3" />
+                                </div>
+                            )}
+                            {status === "playing" && (
+                                <div className="w-5 h-5 rounded-full border-2 border-yellow-500 flex items-center justify-center text-yellow-500">
+                                    <span className="text-[10px] font-bold">...</span>
+                                </div>
+                            )}
+                            {status === "not_played" && (
+                                <div className="w-5 h-5 rounded-full border-2 border-slate-500" />
+                            )}
+                          </div>
+                          <span className="font-medium text-slate-200">{eq.date}</span>
+                          {isToday && <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">Bugün</span>}
+                        </div>
+                        
+                        <div className="text-xs font-semibold">
+                          {status === "won" && <span className="text-emerald-400">Kazanıldı</span>}
+                          {status === "lost" && <span className="text-red-400">Kaybedildi</span>}
+                          {status === "playing" && <span className="text-yellow-400">Devam Ediyor</span>}
+                          {status === "not_played" && <span className="text-slate-500">Oynanmadı</span>}
+                        </div>
                       </button>
                     );
                   })}

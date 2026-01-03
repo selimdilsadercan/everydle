@@ -7,6 +7,7 @@ interface PreviousGamesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectGame: (gameNumber: number) => void;
+  gameStatusCache: Record<number, "won" | "lost" | "playing">;
 }
 
 // İlk oyun tarihi - daily_wordle.json ile eşleşmeli
@@ -17,6 +18,7 @@ export default function PreviousGamesModal({
   isOpen,
   onClose,
   onSelectGame,
+  gameStatusCache,
 }: PreviousGamesModalProps) {
   // Bugünden FIRST_GAME_DATE'e kadar olan tüm tarihleri ve oyun numaralarını oluştur
   const gameList = useMemo(() => {
@@ -85,25 +87,11 @@ export default function PreviousGamesModal({
     return games;
   }, []);
 
-  // LocalStorage'dan oyun durumlarını oku
+  // Cache'den oyun durumlarını oku
   const getGameStatus = (
     gameNumber: number
   ): "won" | "lost" | "playing" | "not-played" => {
-    try {
-      const saved = localStorage.getItem(`wordle-game-${gameNumber}`);
-      if (!saved) return "not-played";
-
-      const parsed = JSON.parse(saved);
-      if (parsed.gameWon) return "won";
-      if (parsed.gameLost) return "lost";
-
-      // Eğer tahmin yapılmışsa ama oyun bitmemişse
-      if (parsed.guesses && parsed.guesses.length > 0) return "playing";
-
-      return "not-played";
-    } catch {
-      return "not-played";
-    }
+    return gameStatusCache[gameNumber] || "not-played";
   };
 
   if (!isOpen) return null;

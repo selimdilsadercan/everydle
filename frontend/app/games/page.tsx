@@ -102,56 +102,14 @@ function getInProgressGamesForDate(date: Date): string[] {
   const gameNumber = getGameNumberFromDate(date);
   const dateStr = formatDateForStorage(date);
   
-  // Wordle kontrolü
-  const wordleSave = localStorage.getItem(`wordle-game-${gameNumber}`);
-  if (wordleSave) {
-    try {
-      const parsed = JSON.parse(wordleSave);
-      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
-        inProgressGames.push("wordle");
-      }
-    } catch (e) {}
-  }
+  // Wordle, Nerdle, Quordle, Moviedle artık tamamen backend tabanlıdır.
+  // Bu yüzden inProgress kontrolü için localStorage yerine backend verisi gereklidir.
+  // Eski localStorage kalıntıları yanlış gösterime sebep olduğu için kaldırıldı.
   
-  // Nerdle kontrolü
-  const nerdleSave = localStorage.getItem(`nerdle-game-${gameNumber}`);
-  if (nerdleSave) {
-    try {
-      const parsed = JSON.parse(nerdleSave);
-      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
-        inProgressGames.push("nerdle");
-      }
-    } catch (e) {}
-  }
+  // Pokerdle kontrolü kaldırıldı - backend tabanlı
   
-  // Pokerdle kontrolü
-  const pokerdleSave = localStorage.getItem(`pokerdle-game-${gameNumber}`);
-  if (pokerdleSave) {
-    try {
-      const parsed = JSON.parse(pokerdleSave);
-      if (parsed.guesses && parsed.guesses.length > 0 && !parsed.gameWon && !parsed.gameLost) {
-        inProgressGames.push("pokerdle");
-      }
-    } catch (e) {}
-  }
-  
-  // Quordle kontrolü
-  const quordleSave = localStorage.getItem(`quordle-game-${dateStr}`);
-  if (quordleSave) {
-    try {
-      const parsed = JSON.parse(quordleSave);
-      if (parsed.games && Array.isArray(parsed.games)) {
-        const hasPlaying = parsed.games.some((g: { gameState: string }) => g.gameState === "playing");
-        const allWon = parsed.games.every((g: { gameState: string }) => g.gameState === "won");
-        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
-        // En az bir tahmin yapılmış mı kontrol et
-        const hasAnyGuess = parsed.games.some((g: { guesses?: unknown[][] }) => g.guesses && g.guesses.length > 0);
-        if (hasPlaying && !allWon && !anyLost && hasAnyGuess) {
-          inProgressGames.push("quordle");
-        }
-      }
-    } catch (e) {}
-  }
+  // Quordle ve Octordle kontrolü (Backend ve Multi-game yapısı için güncellenmeli)
+  // Quordle artık backend tabanlı olduğu için localStorage kontrolü kaldırıldı.
   
   // Octordle kontrolü
   const octordleSave = localStorage.getItem(`octordle-game-${dateStr}`);
@@ -193,19 +151,7 @@ function getInProgressGamesForDate(date: Date): string[] {
     } catch (e) {}
   }
   
-  // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
-  // Moviedle başlangıç: 18 Aralık 2025, Wordle: 23 Kasım 2025. Fark: 25 gün.
-  const moviedleGameNumber = gameNumber > 25 ? gameNumber - 25 : 1;
-  const moviedleSave = localStorage.getItem(`moviedle-game-${moviedleGameNumber}`);
-  if (moviedleSave) {
-    try {
-      const parsed = JSON.parse(moviedleSave);
-      // Moviedle gameState: "playing" | "won" | "lost" kullanıyor
-      if (parsed.guesses && parsed.guesses.length > 0 && parsed.gameState === "playing") {
-        inProgressGames.push("moviedle");
-      }
-    } catch (e) {}
-  }
+  // Moviedle kontrolü kaldırıldı - backend tabanlı
   
   return inProgressGames;
 }
@@ -218,52 +164,11 @@ function getLostGamesForDate(date: Date): string[] {
   const gameNumber = getGameNumberFromDate(date);
   const dateStr = formatDateForStorage(date);
   
-  // Wordle kontrolü
-  const wordleSave = localStorage.getItem(`wordle-game-${gameNumber}`);
-  if (wordleSave) {
-    try {
-      const parsed = JSON.parse(wordleSave);
-      if (parsed.gameLost) {
-        lostGames.push("wordle");
-      }
-    } catch (e) {}
-  }
+  // Wordle ve Nerdle kontrolü kaldırıldı - backend tabanlı
   
-  // Nerdle kontrolü
-  const nerdleSave = localStorage.getItem(`nerdle-game-${gameNumber}`);
-  if (nerdleSave) {
-    try {
-      const parsed = JSON.parse(nerdleSave);
-      if (parsed.gameLost) {
-        lostGames.push("nerdle");
-      }
-    } catch (e) {}
-  }
+  // Pokerdle kontrolü kaldırıldı - backend tabanlı
   
-  // Pokerdle kontrolü
-  const pokerdleSave = localStorage.getItem(`pokerdle-game-${gameNumber}`);
-  if (pokerdleSave) {
-    try {
-      const parsed = JSON.parse(pokerdleSave);
-      if (parsed.gameLost) {
-        lostGames.push("pokerdle");
-      }
-    } catch (e) {}
-  }
-  
-  // Quordle kontrolü - herhangi biri lost ise
-  const quordleSave = localStorage.getItem(`quordle-game-${dateStr}`);
-  if (quordleSave) {
-    try {
-      const parsed = JSON.parse(quordleSave);
-      if (parsed.games && Array.isArray(parsed.games)) {
-        const anyLost = parsed.games.some((g: { gameState: string }) => g.gameState === "lost");
-        if (anyLost) {
-          lostGames.push("quordle");
-        }
-      }
-    } catch (e) {}
-  }
+  // Quordle kontrolü kaldırıldı - backend tabanlı
   
   // Octordle kontrolü - herhangi biri lost ise
   const octordleSave = localStorage.getItem(`octordle-game-${dateStr}`);
@@ -285,19 +190,7 @@ function getLostGamesForDate(date: Date): string[] {
   // Redactle - kaybetme durumu yok
   // Redactle never loses, so skip
   
-  // Moviedle kontrolü - gameNumber ile kaydediyor, gameState kullanıyor
-  // Moviedle başlangıç: 18 Aralık 2025, Wordle: 23 Kasım 2025. Fark: 25 gün.
-  const moviedleGameNumber = gameNumber > 25 ? gameNumber - 25 : 1;
-  const moviedleLostSave = localStorage.getItem(`moviedle-game-${moviedleGameNumber}`);
-  if (moviedleLostSave) {
-    try {
-      const parsed = JSON.parse(moviedleLostSave);
-      // Moviedle gameState: "playing" | "won" | "lost" kullanıyor
-      if (parsed.gameState === "lost") {
-        lostGames.push("moviedle");
-      }
-    } catch (e) {}
-  }
+  // Moviedle kontrolü kaldırıldı - backend tabanlı
   
   return lostGames;
 }
