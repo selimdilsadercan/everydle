@@ -261,7 +261,7 @@ const Wordle = () => {
   // dailyCompleted flag - backend'den yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
   // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
-  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
   const dailyInitialMount = useRef(true);
   
   // Set dailyInitialMount to false after initial render
@@ -462,10 +462,10 @@ const Wordle = () => {
     const loadCompletedGames = async () => {
       const response = await getAllCompletedGames(backendUserId, "wordle");
       if (response.data?.success && response.data.games) {
-        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
         response.data.games.forEach(game => {
           if (game.game_number) {
-            cache[game.game_number] = 'won';
+            cache[game.game_number] = game.status || (game.is_won !== false ? 'won' : 'lost');
           }
         });
         setGameStatusCache(prev => ({ ...prev, ...cache }));

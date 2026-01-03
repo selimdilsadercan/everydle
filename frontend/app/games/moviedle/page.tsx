@@ -143,7 +143,7 @@ const Moviedle = () => {
   // dailyCompleted flag - backend'den yüklendiğinde zaten tamamlanmış oyunlar için tekrar çağırma
   const [dailyCompleted, setDailyCompleted] = useState(false);
   // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
-  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
   // Günlük oyunun tarihini tutar (YYYY-MM-DD)
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const isInitialMount = useRef(true);
@@ -192,9 +192,9 @@ const Moviedle = () => {
       
       const response = await getAllCompletedGames(backendUserId, "moviedle", 50);
       if (response.data?.success && response.data.games) {
-        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
         response.data.games.forEach((g: any) => {
-          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+          cache[g.game_number] = g.status || (g.is_won !== false ? 'won' : 'lost');
         });
         setGameStatusCache(cache);
       }

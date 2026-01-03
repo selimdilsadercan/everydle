@@ -72,9 +72,9 @@ const Nerdle = () => {
       
       const response = await getAllCompletedGames(backendUserId, "nerdle", 50);
       if (response.data?.success && response.data.games) {
-        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
         response.data.games.forEach((g: any) => {
-          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+          cache[g.game_number] = g.status || (g.is_won !== false ? 'won' : 'lost');
         });
         setGameStatusCache(cache);
       }

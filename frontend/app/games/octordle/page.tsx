@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Map as MapIcon, Check } from "lucide-react";
+import { ArrowLeft, MoreVertical, HelpCircle, RotateCcw, Bug, Calendar, X, Map as MapIcon, Check, Play } from "lucide-react";
 import { completeLevel as completeLevelLocal } from "@/lib/levelProgress";
 import { unmarkGameCompleted, formatDate } from "@/lib/dailyCompletion";
 import { triggerDataRefresh } from "@/components/Header";
@@ -77,6 +77,8 @@ const Octordle = () => {
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
   const [completedDates, setCompletedDates] = useState<string[]>([]);
+  // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
 
   // Joker states
   const { hints, stars, isLoading: isStatsLoading } = useUserStats(backendUserId || undefined);
@@ -156,7 +158,14 @@ const Octordle = () => {
     const fetchCompletedGames = async () => {
       const result = await getAllCompletedGames(backendUserId, "octordle");
       if (result.data?.success && result.data.games) {
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
+        result.data.games.forEach((g: any) => {
+          cache[g.game_number] = g.status || (g.is_won !== false ? 'won' : 'lost');
+        });
+        setGameStatusCache(cache);
+
         const dates = result.data.games
+          .filter(g => g.status === 'won' || g.is_won === true)
           .map(g => g.completion_date)
           .filter((d): d is string => !!d);
         setCompletedDates(dates);
@@ -765,14 +774,13 @@ const Octordle = () => {
                   .reverse()
                   .slice(0, 30)
                   .map((entry) => {
-                    // Tarih formatı (YYYY-MM-DD)
                     const [d, m, y] = entry.date.split('.');
                     const isoDate = `${y}-${m}-${d}`;
-                    const isCompleted = completedDates.includes(isoDate);
-
-                    const isToday = entry.date === getTodayFormatted();
                     const dayIndex = dailyEntries.findIndex(e => e.date === entry.date);
                     const gameNumber = dayIndex + 1;
+                    const status = gameStatusCache[gameNumber] || 'not_played';
+
+                    const isToday = entry.date === getTodayFormatted();
                     
                     // Tarih görünüm formatı
                     const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
@@ -786,39 +794,59 @@ const Octordle = () => {
                           router.push(`/games/octordle?date=${urlDate}`);
                           setShowPreviousGames(false);
                         }}
-                        className={`w-full ${isCompleted ? 'bg-slate-700/50' : 'bg-slate-700'} hover:bg-slate-600 rounded-lg p-4 transition-colors flex items-center justify-between group`}
+                        className={`w-full ${status === 'won' ? 'bg-slate-700/50' : 'bg-slate-700'} hover:bg-slate-600 rounded-lg p-4 transition-colors flex items-center justify-between group`}
                       >
                         <div className="flex items-center gap-4">
                           {/* Status Icon */}
                           <div className="w-8 h-8 flex items-center justify-center">
-                            {isCompleted ? (
-                              <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
-                                <Check className="w-4 h-4 text-white" />
-                              </div>
+                            {status === 'won' ? (
+                                <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
+                                    <Check className="w-4 h-4 text-white" />
+                                </div>
+                            ) : status === 'playing' ? (
+                                <div className="w-6 h-6 rounded-full bg-yellow-600 flex items-center justify-center">
+                                    <Play className="w-3 h-3 text-white fill-white" />
+                                </div>
+                            ) : status === 'lost' ? (
+                                <div className="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center">
+                                    <X className="w-4 h-4 text-red-400" />
+                                </div>
                             ) : (
-                              <div className="w-6 h-6 rounded-full border-2 border-slate-500" />
+                                <div className="w-6 h-6 rounded-full border-2 border-slate-500" />
                             )}
                           </div>
 
                           {/* Game Info */}
                           <div className="text-left">
                             <div className="flex items-center gap-3">
-                              <span className={`text-lg font-bold ${isCompleted ? 'text-emerald-400/70' : 'text-emerald-400'}`}>
-                                #{gameNumber}
-                              </span>
-                              <span className="text-sm text-slate-400">
+                              <span className={`text-lg font-bold ${status === 'won' ? 'text-emerald-400/70' : 'text-emerald-400'}`}>
                                 {dayName}
                               </span>
+                              {isToday && (
+                                <span className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                  Güncel
+                                </span>
+                              )}
                             </div>
+                            <p className="text-sm text-slate-400 font-medium">Oyun #{gameNumber}</p>
                           </div>
                         </div>
 
-                        {/* Status Text */}
-                        <div className="text-sm font-semibold">
-                          {isCompleted ? (
-                            <span className="text-emerald-400">Kazanıldı</span>
-                          ) : (
-                            <span className="text-slate-500">Oynanmadı</span>
+                        {/* Status Label */}
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-bold px-2 py-1 rounded ${
+                            status === 'won' ? 'text-emerald-400 bg-emerald-400/10' :
+                            status === 'playing' ? 'text-yellow-500 bg-yellow-500/10' :
+                            status === 'lost' ? 'text-red-400 bg-red-400/10' :
+                            'text-slate-400 bg-slate-400/10'
+                          }`}>
+                            {status === 'won' ? 'Kazandın' : 
+                             status === 'playing' ? 'Devam Ediyor' : 
+                             status === 'lost' ? 'Kaybettin' :
+                             'Oynanmadı'}
+                          </span>
+                          {status === 'won' && (
+                            <Check className="w-5 h-5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                           )}
                         </div>
                       </button>

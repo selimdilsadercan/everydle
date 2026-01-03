@@ -18,7 +18,10 @@ export interface CompletedGame {
     game_id?: string
     game_number: number
     completion_date?: string
-    completed_at: string
+    completed_at?: string
+    is_completed?: boolean
+    is_won?: boolean | null
+    status?: 'won' | 'lost' | 'playing' | 'not_played'
 }
 
 // =====================================================

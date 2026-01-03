@@ -7,7 +7,7 @@ interface PreviousGamesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectGame: (gameNumber: number) => void;
-  gameStatusCache: Record<number, "won" | "lost" | "playing">;
+  gameStatusCache: Record<number, "won" | "lost" | "playing" | "not_played">;
 }
 
 // İlk oyun tarihi - daily_wordle.json ile eşleşmeli
@@ -90,8 +90,8 @@ export default function PreviousGamesModal({
   // Cache'den oyun durumlarını oku
   const getGameStatus = (
     gameNumber: number
-  ): "won" | "lost" | "playing" | "not-played" => {
-    return gameStatusCache[gameNumber] || "not-played";
+  ): "won" | "lost" | "playing" | "not_played" => {
+    return gameStatusCache[gameNumber] || "not_played";
   };
 
   if (!isOpen) return null;

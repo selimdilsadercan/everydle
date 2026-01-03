@@ -237,8 +237,6 @@ function GamesContent() {
   
   // Selected date (null means no day selected)
   const [selectedDate, setSelectedDate] = useState<Date | null>(initialDate);
-  const [inProgressGames, setInProgressGames] = useState<string[]>([]);
-  const [lostGames, setLostGames] = useState<string[]>([]);
   const [completedLevelIds, setCompletedLevelIds] = useState<number[]>([]);
   const [showRewardAnimation, setShowRewardAnimation] = useState<number | null>(null);
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -254,10 +252,14 @@ function GamesContent() {
   const selectedDateStr = selectedDate ? formatDate(selectedDate) : undefined;
   
   // React Query hooks for data fetching with caching
-  const { data: completedGames = [], isLoading: completedGamesLoading } = useCompletedGamesForDate(
+  const { data: allGamesData = [], isLoading: completedGamesLoading } = useCompletedGamesForDate(
     backendUserId ?? undefined, 
     selectedDateStr
   );
+
+  const completedGames = allGamesData.filter(g => g.status === 'won').map(g => g.game_id).filter((id): id is string => !!id);
+  const inProgressGames = allGamesData.filter(g => g.status === 'playing').map(g => g.game_id).filter((id): id is string => !!id);
+  const lostGames = allGamesData.filter(g => g.status === 'lost').map(g => g.game_id).filter((id): id is string => !!id);
   
   const { data: claimedChests = [], isLoading: claimedChestsLoading } = useClaimedChests(
     backendUserId ?? undefined, 
@@ -275,16 +277,8 @@ function GamesContent() {
     }
   };
 
-  // Load in-progress games, lost games and level progress when date changes
+  // Load level progress when selectedDate changes (level progress is global but might be used here)
   useEffect(() => {
-    if (selectedDate) {
-      setInProgressGames(getInProgressGamesForDate(selectedDate));
-      setLostGames(getLostGamesForDate(selectedDate));
-    } else {
-      setInProgressGames([]);
-      setLostGames([]);
-    }
-    
     const progress = getLevelProgress();
     setCompletedLevelIds(progress.completedLevels);
   }, [selectedDate]);

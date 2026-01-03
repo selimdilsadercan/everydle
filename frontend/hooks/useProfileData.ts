@@ -294,7 +294,7 @@ export function useCompletedGamesForDate(userId: string | undefined, date: strin
     enabled: !!userId && !!date,
     select: (data) => {
       if (data.data?.success && data.data.games) {
-        return data.data.games.map(g => g.game_id).filter((id): id is string => !!id);
+        return data.data.games;
       }
       return [];
     },

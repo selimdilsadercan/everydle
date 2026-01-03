@@ -213,7 +213,7 @@ const Quordle = () => {
   }, [searchParams]);
 
   // Game status cache for previous games modal: 'won' | 'lost' | 'playing' | 'not_played'
-  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing'>>({});
+  const [gameStatusCache, setGameStatusCache] = useState<Record<number, 'won' | 'lost' | 'playing' | 'not_played'>>({});
   
   // Load completed games from backend (single efficient API call)
   useEffect(() => {
@@ -225,11 +225,9 @@ const Quordle = () => {
       
       const response = await getAllCompletedGames(backendUserId, "quordle", 50);
       if (response.data?.success && response.data.games) {
-        const cache: Record<number, 'won' | 'lost' | 'playing'> = {};
+        const cache: Record<number, 'won' | 'lost' | 'playing' | 'not_played'> = {};
         response.data.games.forEach((g: any) => {
-          // Backend returns is_won field - if game is in completed list and is_won=true -> won
-          // If is_won=false -> lost (but daily service usually only tracks completed wins)
-          cache[g.game_number] = g.is_won !== false ? 'won' : 'lost';
+          cache[g.game_number] = g.status || (g.is_won !== false ? 'won' : 'lost');
         });
         setGameStatusCache(cache);
       }
